@@ -9,7 +9,7 @@ A tool used to download or upload Fortnite "ClientSettings.sav" and related file
 The Android app now embeds the Python backend with Chaquopy, so the auth and cloud-storage logic stays in Python instead of being reimplemented in Kotlin.
 
 To build it:
-- Open the `app/` module in Android Studio, or run the `Android CI` GitHub Actions workflow.
+- Open the project in Android Studio, or run the `Android CI` GitHub Actions workflow.
 - The Android build uses Python 3.12 and installs `requests` automatically through the Gradle `chaquopy` block.
 
 ## Usage
