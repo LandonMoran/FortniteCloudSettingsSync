@@ -156,7 +156,7 @@ fun FilesScreen(
                     }
                 },
                 floatingActionButton = {
-                    FloatingActionButton(onClick = onUpload, enabled = !state.isLoading) {
+                    FloatingActionButton(onClick = { if (!state.isLoading) onUpload() }) {
                         Icon(Icons.Default.CloudUpload, contentDescription = "Upload files")
                     }
                 }
