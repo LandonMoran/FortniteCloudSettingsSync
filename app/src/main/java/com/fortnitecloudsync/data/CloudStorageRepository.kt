@@ -69,6 +69,10 @@ class CloudStorageRepository(private val auth: AuthRepository) {
                                 else -> emptyList()
                             }
                         }
+                        obj.has("items") -> {
+                            val arr = obj.getJSONArray("items")
+                            (0 until arr.length()).mapNotNull { parseCloudFile(arr.getJSONObject(it)) }
+                        }
                         obj.has("uniqueFilename") -> listOfNotNull(parseCloudFile(obj))
                         else -> emptyList()
                     }
