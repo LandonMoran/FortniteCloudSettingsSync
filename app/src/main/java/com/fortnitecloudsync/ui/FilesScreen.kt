@@ -58,9 +58,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,7 +89,6 @@ fun FilesScreen(
     val logListState = rememberLazyListState()
     val context = LocalContext.current
     val clipboardManager = remember { context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager }
-    val composeClipboardManager = LocalClipboardManager.current
 
     LaunchedEffect(state.statusMessages.size) {
         if (state.statusMessages.isNotEmpty()) {
@@ -306,33 +303,32 @@ fun FilesScreen(
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold
                         )
-                        if (state.statusMessages.isNotEmpty()) {
-                            OutlinedButton(
-                                onClick = {
-                                    val fullLog = state.statusMessages.joinToString("\n")
-                                    composeClipboardManager.setText(AnnotatedString(fullLog))
-                                    clipboardManager?.setPrimaryClip(
-                                        ClipData.newPlainText("Fortnite Sync Log", fullLog)
-                                    )
-                                    Toast.makeText(context, "Log copied to clipboard", Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier
-                                    .heightIn(min = 48.dp)
-                                    .semantics {
-                                        contentDescription = "Copy log to clipboard"
-                                        role = Role.Button
-                                    },
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.ContentCopy,
-                                    contentDescription = "Copy",
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text("Copy Log", fontSize = 13.sp)
-                            }
-                        }
+                         if (state.statusMessages.isNotEmpty()) {
+                             OutlinedButton(
+                                 onClick = {
+                                     val fullLog = state.statusMessages.joinToString("\n")
+                                     clipboardManager?.setPrimaryClip(
+                                         ClipData.newPlainText("Fortnite Sync Log", fullLog)
+                                     )
+                                     Toast.makeText(context, "Log copied to clipboard", Toast.LENGTH_SHORT).show()
+                                 },
+                                 modifier = Modifier
+                                     .heightIn(min = 48.dp)
+                                     .semantics {
+                                         contentDescription = "Copy log to clipboard"
+                                         role = Role.Button
+                                     },
+                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)
+                             ) {
+                                 Icon(
+                                     Icons.Default.ContentCopy,
+                                     contentDescription = "Copy",
+                                     modifier = Modifier.size(18.dp)
+                                 )
+                                 Spacer(Modifier.width(8.dp))
+                                 Text("Copy Log", fontSize = 13.sp)
+                             }
+                         }
                     }
                     Spacer(Modifier.height(4.dp))
                     LazyColumn(
