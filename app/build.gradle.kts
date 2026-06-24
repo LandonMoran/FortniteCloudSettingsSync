@@ -22,7 +22,7 @@ android {
     // Reads keystore details from env vars when set (e.g. in CI).
     // Set KEYSTORE_FILE, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD to enable
     // signed release builds; omit them to produce an unsigned APK.
-    val keystoreFile = System.getenv("KEYSTORE_FILE")
+    val keystoreFile = System.getenv("KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
     if (keystoreFile != null) {
         signingConfigs {
             create("release") {
