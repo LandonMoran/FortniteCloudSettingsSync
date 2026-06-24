@@ -43,6 +43,9 @@ REDIRECT_URL_FIELD_PATTERN = re.compile(
 RAW_CODE_PATTERN = re.compile(r"^[a-zA-Z0-9]{20,40}$")
 FALLBACK_RAW_CODE_PATTERN = re.compile(r"^[A-Za-z0-9._~-]{20,512}$")
 
+# Request timeout: (connect, read) seconds, matching original OkHttp settings.
+_REQUEST_TIMEOUT = (30, 60)
+
 
 def _auth_header() -> str:
     auth_string = f"{CLIENT_ID}:{CLIENT_SECRET}"
@@ -167,7 +170,7 @@ class EpicGamesAuth:
         }
 
         try:
-            response = requests.post(url, headers=headers, data=data)
+            response = requests.post(url, headers=headers, data=data, timeout=_REQUEST_TIMEOUT)
             if response.status_code == 200:
                 result = response.json()
                 self.access_token = result.get("access_token")
@@ -195,7 +198,7 @@ class EpicGamesAuth:
         headers = {"Authorization": f"bearer {self.access_token}"}
 
         try:
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, timeout=_REQUEST_TIMEOUT)
             return response.status_code == 200
         except requests.RequestException:
             return False
@@ -236,7 +239,7 @@ class FortniteCloudStorage:
         headers = {"Authorization": f"bearer {self.auth.access_token}"}
 
         try:
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, timeout=_REQUEST_TIMEOUT)
             response.raise_for_status()
 
             data = response.json()
@@ -291,7 +294,7 @@ class FortniteCloudStorage:
         headers = {"Authorization": f"bearer {self.auth.access_token}"}
 
         try:
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, timeout=_REQUEST_TIMEOUT)
             response.raise_for_status()
             return True, f"Downloaded {unique_filename} ({self.format_size(len(response.content))})", response.content
         except requests.RequestException as exc:
@@ -337,7 +340,7 @@ class FortniteCloudStorage:
                 file.get("uniqueFilename") == unique_filename
                 for file in self.list_files_data(filter_restricted=False)[2]
             )
-            response = requests.put(url, headers=headers, data=file_data)
+            response = requests.put(url, headers=headers, data=file_data, timeout=_REQUEST_TIMEOUT)
             response.raise_for_status()
 
             action = "Replaced" if file_exists else "Uploaded"
@@ -378,7 +381,7 @@ class FortniteCloudStorage:
         headers = {"Authorization": f"bearer {self.auth.access_token}"}
 
         try:
-            response = requests.delete(url, headers=headers)
+            response = requests.delete(url, headers=headers, timeout=_REQUEST_TIMEOUT)
             response.raise_for_status()
             return True, f"Deleted {unique_filename}\nStatus: {response.status_code}"
         except requests.RequestException as exc:
