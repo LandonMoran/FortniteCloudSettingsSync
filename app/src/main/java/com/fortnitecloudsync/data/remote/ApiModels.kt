@@ -8,13 +8,3 @@ data class TokenResponse(
     @SerializedName("refresh_token") val refreshToken: String?,
     @SerializedName("errorMessage") val errorMessage: String?
 )
-
-data class DeviceAuthResponse(
-    @SerializedName("accountId") val accountId: String?,
-    @SerializedName("deviceId") val deviceId: String?,
-    @SerializedName("secret") val secret: String?
-)
-
-data class AccountInfoResponse(
-    @SerializedName("displayName") val displayName: String?
-)
