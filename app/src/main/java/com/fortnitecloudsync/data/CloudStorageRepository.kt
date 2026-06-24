@@ -1,5 +1,6 @@
 package com.fortnitecloudsync.data
 
+import android.util.Log
 import com.fortnitecloudsync.data.model.CloudFile
 import com.fortnitecloudsync.data.remote.NetworkModule
 import kotlinx.coroutines.Dispatchers
@@ -12,6 +13,10 @@ import java.net.URLEncoder
 import java.util.regex.Pattern
 
 class CloudStorageRepository(private val auth: AuthRepository) {
+
+    companion object {
+        private const val TAG = "CloudStorageRepo"
+    }
 
     private val restrictedFiles = setOf("ClientSettingsSwitch.Sav")
     private val uuidPattern = Pattern.compile(
@@ -29,20 +34,31 @@ class CloudStorageRepository(private val auth: AuthRepository) {
         withContext(Dispatchers.IO) {
             if (!auth.isAuthenticated) return@withContext Result.failure(Exception("Authentication required"))
             try {
+                Log.d(TAG, "Listing files for account: ${auth.accountId}")
+                Log.d(TAG, "Using Bearer token: ${auth.getBearerHeader().take(20)}...")
+                
                 val response = NetworkModule.fortniteApi.listFiles(
                     authorization = auth.getBearerHeader(),
                     accountId = auth.accountId!!
                 )
+                
+                Log.d(TAG, "Response code: ${response.code()}")
+                Log.d(TAG, "Response headers: ${response.headers()}")
+                
                 if (response.isSuccessful) {
                     val body = response.body()?.string() ?: return@withContext Result.success(Pair(emptyList(), 0))
+                    Log.d(TAG, "Response body length: ${body.length}")
                     val files = parseFilesResponse(body)
                     val filtered = if (filterRestricted) files.filter { isFileAllowed(it.uniqueFilename) } else files
                     val filteredCount = files.size - filtered.size
                     Result.success(Pair(filtered, filteredCount))
                 } else {
-                    Result.failure(Exception("Failed to list files (${response.code()})"))
+                    val errorBody = response.errorBody()?.string() ?: "No error body"
+                    Log.e(TAG, "Error response: $errorBody")
+                    Result.failure(Exception("Failed to list files (${response.code()}): $errorBody"))
                 }
             } catch (e: Exception) {
+                Log.e(TAG, "Exception during listFiles", e)
                 Result.failure(Exception("Network error: ${e.message}"))
             }
         }
@@ -81,6 +97,7 @@ class CloudStorageRepository(private val auth: AuthRepository) {
                 else -> emptyList()
             }
         } catch (e: Exception) {
+            Log.e(TAG, "Error parsing files response", e)
             emptyList()
         }
     }
@@ -100,17 +117,25 @@ class CloudStorageRepository(private val auth: AuthRepository) {
         if (!isFileAllowed(filename)) return@withContext Result.failure(Exception("File is restricted"))
         try {
             val encoded = URLEncoder.encode(filename, "UTF-8")
+            Log.d(TAG, "Downloading file: $filename (encoded: $encoded)")
+            
             val response = NetworkModule.fortniteApi.downloadFile(
                 authorization = auth.getBearerHeader(),
                 accountId = auth.accountId!!,
                 filename = encoded
             )
+            
+            Log.d(TAG, "Download response code: ${response.code()}")
+            
             if (response.isSuccessful) {
                 Result.success(response.body()?.bytes() ?: byteArrayOf())
             } else {
-                Result.failure(Exception("Download failed (${response.code()})"))
+                val errorBody = response.errorBody()?.string() ?: "Unknown error"
+                Log.e(TAG, "Download error: $errorBody")
+                Result.failure(Exception("Download failed (${response.code()}): $errorBody"))
             }
         } catch (e: Exception) {
+            Log.e(TAG, "Download exception", e)
             Result.failure(Exception("Network error: ${e.message}"))
         }
     }
@@ -125,6 +150,9 @@ class CloudStorageRepository(private val auth: AuthRepository) {
                     ?.any { it.uniqueFilename == filename } == true
                 val encoded = URLEncoder.encode(filename, "UTF-8")
                 val body = data.toRequestBody("application/octet-stream".toMediaType())
+                
+                Log.d(TAG, "Uploading file: $filename (encoded: $encoded)")
+                
                 val response = NetworkModule.fortniteApi.uploadFile(
                     authorization = auth.getBearerHeader(),
                     contentType = "application/octet-stream",
@@ -132,14 +160,19 @@ class CloudStorageRepository(private val auth: AuthRepository) {
                     filename = encoded,
                     body = body
                 )
+                
+                Log.d(TAG, "Upload response code: ${response.code()}")
+                
                 if (response.isSuccessful) {
                     val action = if (fileExists) "Replaced" else "Uploaded"
                     Result.success("$action $filename (${formatSize(data.size.toLong())})")
                 } else {
                     val errorBody = response.errorBody()?.string() ?: "Unknown error"
+                    Log.e(TAG, "Upload error: $errorBody")
                     Result.failure(Exception("Upload failed (${response.code()}): $errorBody"))
                 }
             } catch (e: Exception) {
+                Log.e(TAG, "Upload exception", e)
                 Result.failure(Exception("Network error: ${e.message}"))
             }
         }
@@ -149,18 +182,25 @@ class CloudStorageRepository(private val auth: AuthRepository) {
         if (!isFileAllowed(filename)) return@withContext Result.failure(Exception("File is restricted"))
         try {
             val encoded = URLEncoder.encode(filename, "UTF-8")
+            Log.d(TAG, "Deleting file: $filename (encoded: $encoded)")
+            
             val response = NetworkModule.fortniteApi.deleteFile(
                 authorization = auth.getBearerHeader(),
                 accountId = auth.accountId!!,
                 filename = encoded
             )
+            
+            Log.d(TAG, "Delete response code: ${response.code()}")
+            
             if (response.isSuccessful) {
                 Result.success("Deleted $filename")
             } else {
                 val errorBody = response.errorBody()?.string() ?: "Unknown error"
+                Log.e(TAG, "Delete error: $errorBody")
                 Result.failure(Exception("Delete failed (${response.code()}): $errorBody"))
             }
         } catch (e: Exception) {
+            Log.e(TAG, "Delete exception", e)
             Result.failure(Exception("Network error: ${e.message}"))
         }
     }

@@ -8,14 +8,33 @@ import java.util.concurrent.TimeUnit
 
 object NetworkModule {
 
-    private val okHttpClient = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
-        .addInterceptor(HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
-        })
-        .build()
+    private val baseHeaders = mapOf(
+        "User-Agent" to "Fortnite/++UE4+Release-4.25-CL-14930499 Windows/10.0.19041.1.256.64bit",
+        "Accept" to "application/json"
+    )
+
+    private fun buildOkHttpClient(): OkHttpClient {
+        val loggingInterceptor = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BODY // Changed to BODY for debugging
+        }
+
+        return OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .addInterceptor { chain ->
+                val request = chain.request().newBuilder().apply {
+                    baseHeaders.forEach { (key, value) ->
+                        addHeader(key, value)
+                    }
+                }.build()
+                chain.proceed(request)
+            }
+            .addInterceptor(loggingInterceptor)
+            .build()
+    }
+
+    private val okHttpClient = buildOkHttpClient()
 
     val epicGamesApi: EpicGamesApiService = Retrofit.Builder()
         .baseUrl("https://account-public-service-prod03.ol.epicgames.com/")
