@@ -26,13 +26,12 @@ data class AppState(
     val cloudFiles: List<CloudFile> = emptyList(),
     val statusMessages: List<String> = emptyList(),
     val filterRestricted: Boolean = true,
-    val selectedFile: CloudFile? = null,
-    val displayName: String? = null
+    val selectedFile: CloudFile? = null
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val authRepository = AuthRepository(application)
+    private val authRepository = AuthRepository()
     private val cloudRepository = CloudStorageRepository(authRepository)
 
     private val _state = MutableStateFlow(AppState())
@@ -42,35 +41,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         log("Ready. Please login with your Epic Games account.")
-        log("Uploading a file will replace any existing file with the same name.")
+        log("Note: Uploading files will automatically replace any existing files with the same name.")
         log("Note: UUID-named files and some platform files (e.g. Switch) are restricted and filtered out by default.")
-        tryAutoLogin()
     }
 
     fun getAuthorizationUrl(): String = authRepository.getAuthorizationUrl()
-
-    fun tryAutoLogin() {
-        if (!authRepository.hasStoredCredentials()) return
-        log("Found saved credentials, attempting auto-login...")
-        viewModelScope.launch {
-            _state.value = _state.value.copy(isLoading = true)
-            authRepository.autoLogin()
-                .onSuccess { message ->
-                    log(message)
-                    _state.value = _state.value.copy(
-                        isAuthenticated = true,
-                        isLoading = false,
-                        displayName = authRepository.displayName
-                    )
-                    refreshFiles()
-                }
-                .onFailure { e ->
-                    log("Auto-login failed: ${e.message}")
-                    log("Please login manually.")
-                    _state.value = _state.value.copy(isLoading = false)
-                }
-        }
-    }
 
     fun authenticate(input: String) {
         val code = extractCode(input)
@@ -88,8 +63,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     log(message)
                     _state.value = _state.value.copy(
                         isAuthenticated = true,
-                        isLoading = false,
-                        displayName = authRepository.displayName
+                        isLoading = false
                     )
                     refreshFiles()
                 }
@@ -101,7 +75,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logout() {
-        authRepository.clearStoredCredentials()
         _state.value = AppState()
         log("Logged out. Please login again.")
     }
