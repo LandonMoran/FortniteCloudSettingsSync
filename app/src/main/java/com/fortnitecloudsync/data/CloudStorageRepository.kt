@@ -25,7 +25,7 @@ class CloudStorageRepository(private val auth: AuthRepository) {
         return true
     }
 
-    suspend fun listFiles(filterRestricted: Boolean = true): Result<List<CloudFile>> =
+    suspend fun listFiles(filterRestricted: Boolean = true): Result<Pair<List<CloudFile>, Int>> =
         withContext(Dispatchers.IO) {
             if (!auth.isAuthenticated) return@withContext Result.failure(Exception("Authentication required"))
             try {
@@ -34,10 +34,11 @@ class CloudStorageRepository(private val auth: AuthRepository) {
                     accountId = auth.accountId!!
                 )
                 if (response.isSuccessful) {
-                    val body = response.body()?.string() ?: return@withContext Result.success(emptyList())
+                    val body = response.body()?.string() ?: return@withContext Result.success(Pair(emptyList(), 0))
                     val files = parseFilesResponse(body)
                     val filtered = if (filterRestricted) files.filter { isFileAllowed(it.uniqueFilename) } else files
-                    Result.success(filtered)
+                    val filteredCount = files.size - filtered.size
+                    Result.success(Pair(filtered, filteredCount))
                 } else {
                     Result.failure(Exception("Failed to list files (${response.code()})"))
                 }
@@ -119,6 +120,9 @@ class CloudStorageRepository(private val auth: AuthRepository) {
             if (!auth.isAuthenticated) return@withContext Result.failure(Exception("Authentication required"))
             if (!isFileAllowed(filename)) return@withContext Result.failure(Exception("File is restricted"))
             try {
+                val fileExists = listFiles(false)
+                    .getOrNull()?.first
+                    ?.any { it.uniqueFilename == filename } == true
                 val encoded = URLEncoder.encode(filename, "UTF-8")
                 val body = data.toRequestBody("application/octet-stream".toMediaType())
                 val response = NetworkModule.fortniteApi.uploadFile(
@@ -129,7 +133,8 @@ class CloudStorageRepository(private val auth: AuthRepository) {
                     body = body
                 )
                 if (response.isSuccessful) {
-                    Result.success("Uploaded $filename (${formatSize(data.size.toLong())})")
+                    val action = if (fileExists) "Replaced" else "Uploaded"
+                    Result.success("$action $filename (${formatSize(data.size.toLong())})")
                 } else {
                     val errorBody = response.errorBody()?.string() ?: "Unknown error"
                     Result.failure(Exception("Upload failed (${response.code()}): $errorBody"))
