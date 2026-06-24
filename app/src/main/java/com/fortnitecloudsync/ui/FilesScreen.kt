@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.role
 import com.fortnitecloudsync.data.model.CloudFile
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -318,7 +319,7 @@ fun FilesScreen(
                                 modifier = Modifier
                                     .heightIn(min = 48.dp)
                                     .semantics {
-                                        contentDescription = listOf("Copy log to clipboard")
+                                        contentDescription = "Copy log to clipboard"
                                         role = Role.Button
                                     },
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)
