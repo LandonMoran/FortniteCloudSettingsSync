@@ -26,7 +26,8 @@ data class AppState(
     val cloudFiles: List<CloudFile> = emptyList(),
     val statusMessages: List<String> = emptyList(),
     val filterRestricted: Boolean = true,
-    val selectedFile: CloudFile? = null
+    val selectedFile: CloudFile? = null,
+    val displayName: String? = null
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -49,14 +50,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun getAuthorizationUrl(): String = authRepository.getAuthorizationUrl()
 
     fun tryAutoLogin() {
-        if (!authRepository.hasStoredDeviceCredentials()) return
+        if (!authRepository.hasStoredCredentials()) return
         log("Found saved credentials, attempting auto-login...")
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true)
-            authRepository.loginWithDeviceAuth()
+            authRepository.autoLogin()
                 .onSuccess { message ->
                     log(message)
-                    _state.value = _state.value.copy(isAuthenticated = true, isLoading = false)
+                    _state.value = _state.value.copy(
+                        isAuthenticated = true,
+                        isLoading = false,
+                        displayName = authRepository.displayName
+                    )
                     refreshFiles()
                 }
                 .onFailure { e ->
@@ -81,7 +86,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             authRepository.exchangeCode(code)
                 .onSuccess { message ->
                     log(message)
-                    _state.value = _state.value.copy(isAuthenticated = true, isLoading = false)
+                    _state.value = _state.value.copy(
+                        isAuthenticated = true,
+                        isLoading = false,
+                        displayName = authRepository.displayName
+                    )
                     refreshFiles()
                 }
                 .onFailure { e ->
