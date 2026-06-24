@@ -17,6 +17,8 @@ class AuthRepository(context: Context) {
         private set
     var accountId: String? = null
         private set
+    var displayName: String? = null
+        private set
 
     val isAuthenticated: Boolean
         get() = accessToken != null && accountId != null
@@ -34,19 +36,27 @@ class AuthRepository(context: Context) {
         return "basic ${Base64.encodeToString(authString.toByteArray(), Base64.NO_WRAP)}"
     }
 
-    fun hasStoredDeviceCredentials(): Boolean =
-        prefs.getString("device_account_id", null) != null &&
-        prefs.getString("device_device_id", null) != null &&
-        prefs.getString("device_secret", null) != null
+    fun hasStoredCredentials(): Boolean =
+        prefs.getString("refresh_token", null) != null ||
+        (prefs.getString("device_account_id", null) != null &&
+         prefs.getString("device_device_id", null) != null &&
+         prefs.getString("device_secret", null) != null)
 
     fun clearStoredCredentials() {
         prefs.edit()
+            .remove("refresh_token")
             .remove("device_account_id")
             .remove("device_device_id")
             .remove("device_secret")
+            .remove("display_name")
             .apply()
         accessToken = null
         accountId = null
+        displayName = null
+    }
+
+    private fun saveRefreshToken(token: String) {
+        prefs.edit().putString("refresh_token", token).apply()
     }
 
     private fun saveDeviceCredentials(devAccountId: String, deviceId: String, secret: String) {
@@ -55,6 +65,10 @@ class AuthRepository(context: Context) {
             .putString("device_device_id", deviceId)
             .putString("device_secret", secret)
             .apply()
+    }
+
+    private fun saveDisplayName(name: String) {
+        prefs.edit().putString("display_name", name).apply()
     }
 
     suspend fun exchangeCode(code: String): Result<String> = withContext(Dispatchers.IO) {
@@ -72,8 +86,11 @@ class AuthRepository(context: Context) {
                 if (token != null && id != null) {
                     accessToken = token
                     accountId = id
+                    body.refreshToken?.let { saveRefreshToken(it) }
+                    fetchAndSaveDisplayName()
                     createDeviceCredentials()
-                    Result.success("Authentication successful! Account ID: $id")
+                    val name = displayName ?: id
+                    Result.success("Authentication successful! Logged in as $name")
                 } else {
                     Result.failure(Exception("Missing token or account ID in response"))
                 }
@@ -86,43 +103,102 @@ class AuthRepository(context: Context) {
         }
     }
 
-    suspend fun loginWithDeviceAuth(): Result<String> = withContext(Dispatchers.IO) {
+    // Try refresh token first (fast), fall back to device auth (reliable long-term)
+    suspend fun autoLogin(): Result<String> = withContext(Dispatchers.IO) {
+        val storedRefreshToken = prefs.getString("refresh_token", null)
+        if (storedRefreshToken != null) {
+            val refreshResult = tryRefreshToken(storedRefreshToken)
+            if (refreshResult.isSuccess) return@withContext refreshResult
+        }
+
         val savedAccountId = prefs.getString("device_account_id", null)
         val deviceId = prefs.getString("device_device_id", null)
         val secret = prefs.getString("device_secret", null)
-
-        if (savedAccountId == null || deviceId == null || secret == null) {
-            return@withContext Result.failure(Exception("No stored device credentials"))
+        if (savedAccountId != null && deviceId != null && secret != null) {
+            return@withContext tryDeviceAuth(savedAccountId, deviceId, secret)
         }
 
-        try {
+        Result.failure(Exception("No stored credentials"))
+    }
+
+    private suspend fun tryRefreshToken(token: String): Result<String> {
+        return try {
+            val response = NetworkModule.epicGamesApi.refreshToken(
+                authorization = getBasicAuthHeader(),
+                refreshToken = token
+            )
+            if (response.isSuccessful) {
+                val body = response.body()
+                val newToken = body?.accessToken
+                val id = body?.accountId
+                if (newToken != null && id != null) {
+                    accessToken = newToken
+                    accountId = id
+                    // Epic doesn't always rotate refresh tokens; keep existing one if no new one
+                    body.refreshToken?.let { saveRefreshToken(it) }
+                    displayName = prefs.getString("display_name", null)
+                    if (displayName == null) fetchAndSaveDisplayName()
+                    val name = displayName ?: id
+                    Result.success("Auto-login successful! Logged in as $name")
+                } else {
+                    Result.failure(Exception("Missing token in refresh response"))
+                }
+            } else {
+                prefs.edit().remove("refresh_token").apply()
+                Result.failure(Exception("Refresh failed (${response.code()})"))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("Network error: ${e.message}"))
+        }
+    }
+
+    private suspend fun tryDeviceAuth(savedAccountId: String, deviceId: String, secret: String): Result<String> {
+        return try {
             val response = NetworkModule.epicGamesApi.deviceAuthLogin(
                 authorization = getBasicAuthHeader(),
                 accountId = savedAccountId,
                 deviceId = deviceId,
                 secret = secret
             )
-
             if (response.isSuccessful) {
                 val body = response.body()
                 val token = body?.accessToken
                 val id = body?.accountId
-
                 if (token != null && id != null) {
                     accessToken = token
                     accountId = id
-                    Result.success("Auto-login successful! Account ID: $id")
+                    body.refreshToken?.let { saveRefreshToken(it) }
+                    displayName = prefs.getString("display_name", null)
+                    if (displayName == null) fetchAndSaveDisplayName()
+                    val name = displayName ?: id
+                    Result.success("Auto-login successful! Logged in as $name")
                 } else {
-                    Result.failure(Exception("Missing token or account ID in response"))
+                    Result.failure(Exception("Missing token in device auth response"))
                 }
             } else {
                 clearStoredCredentials()
                 val errorBody = response.errorBody()?.string() ?: "Unknown error"
-                Result.failure(Exception("Auto-login failed (${response.code()}): $errorBody"))
+                Result.failure(Exception("Device auth failed (${response.code()}): $errorBody"))
             }
         } catch (e: Exception) {
             Result.failure(Exception("Network error: ${e.message}"))
         }
+    }
+
+    private suspend fun fetchAndSaveDisplayName() {
+        try {
+            val response = NetworkModule.epicGamesApi.getAccountInfo(
+                authorization = getBearerHeader(),
+                accountId = accountId!!
+            )
+            if (response.isSuccessful) {
+                val name = response.body()?.displayName
+                if (name != null) {
+                    displayName = name
+                    saveDisplayName(name)
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     private suspend fun createDeviceCredentials() {
@@ -140,9 +216,7 @@ class AuthRepository(context: Context) {
                     saveDeviceCredentials(devAccountId, deviceId, devSecret)
                 }
             }
-        } catch (_: Exception) {
-            // Device credential creation is best-effort; don't fail the main auth flow
-        }
+        } catch (_: Exception) {}
     }
 
     suspend fun verifyToken(): Boolean = withContext(Dispatchers.IO) {

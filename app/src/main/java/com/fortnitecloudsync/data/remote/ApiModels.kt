@@ -14,3 +14,7 @@ data class DeviceAuthResponse(
     @SerializedName("deviceId") val deviceId: String?,
     @SerializedName("secret") val secret: String?
 )
+
+data class AccountInfoResponse(
+    @SerializedName("displayName") val displayName: String?
+)
