@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.FilePresent
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -66,6 +67,7 @@ fun FilesScreen(
     onDownloadAll: () -> Unit,
     onUpload: () -> Unit,
     onDelete: (CloudFile) -> Unit,
+    onLogout: () -> Unit,
     formatSize: (Long) -> String,
     formatDate: (String?) -> String
 ) {
@@ -124,6 +126,9 @@ fun FilesScreen(
                         IconButton(onClick = onRefresh) {
                             Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                         }
+                    }
+                    IconButton(onClick = onLogout) {
+                        Icon(Icons.Default.ExitToApp, contentDescription = "Logout")
                     }
                 }
             )

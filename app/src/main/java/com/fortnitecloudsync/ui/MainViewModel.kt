@@ -1,9 +1,10 @@
 package com.fortnitecloudsync.ui
 
+import android.app.Application
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fortnitecloudsync.data.AuthRepository
 import com.fortnitecloudsync.data.CloudStorageRepository
@@ -28,9 +29,9 @@ data class AppState(
     val selectedFile: CloudFile? = null
 )
 
-class MainViewModel : ViewModel() {
+class MainViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val authRepository = AuthRepository()
+    private val authRepository = AuthRepository(application)
     private val cloudRepository = CloudStorageRepository(authRepository)
 
     private val _state = MutableStateFlow(AppState())
@@ -42,9 +43,29 @@ class MainViewModel : ViewModel() {
         log("Ready. Please login with your Epic Games account.")
         log("Uploading a file will replace any existing file with the same name.")
         log("Note: UUID-named files and some platform files (e.g. Switch) are restricted and filtered out by default.")
+        tryAutoLogin()
     }
 
     fun getAuthorizationUrl(): String = authRepository.getAuthorizationUrl()
+
+    fun tryAutoLogin() {
+        if (!authRepository.hasStoredDeviceCredentials()) return
+        log("Found saved credentials, attempting auto-login...")
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isLoading = true)
+            authRepository.loginWithDeviceAuth()
+                .onSuccess { message ->
+                    log(message)
+                    _state.value = _state.value.copy(isAuthenticated = true, isLoading = false)
+                    refreshFiles()
+                }
+                .onFailure { e ->
+                    log("Auto-login failed: ${e.message}")
+                    log("Please login manually.")
+                    _state.value = _state.value.copy(isLoading = false)
+                }
+        }
+    }
 
     fun authenticate(input: String) {
         val code = extractCode(input)
@@ -68,6 +89,12 @@ class MainViewModel : ViewModel() {
                     _state.value = _state.value.copy(isLoading = false)
                 }
         }
+    }
+
+    fun logout() {
+        authRepository.clearStoredCredentials()
+        _state.value = AppState()
+        log("Logged out. Please login again.")
     }
 
     fun refreshFiles() {
