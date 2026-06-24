@@ -2,13 +2,12 @@ package com.fortnitecloudsync.data
 
 import com.fortnitecloudsync.data.model.CloudFile
 import com.fortnitecloudsync.data.remote.NetworkModule
-import com.google.gson.JsonArray
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.regex.Pattern
 
@@ -49,18 +48,26 @@ class CloudStorageRepository(private val auth: AuthRepository) {
 
     private fun parseFilesResponse(body: String): List<CloudFile> {
         return try {
-            val element = JsonParser.parseString(body)
+            val trimmed = body.trim()
             when {
-                element.isJsonArray -> element.asJsonArray.mapNotNull { parseCloudFile(it.asJsonObject) }
-                element.isJsonObject -> {
-                    val obj = element.asJsonObject
+                trimmed.startsWith('[') -> {
+                    val arr = JSONArray(body)
+                    (0 until arr.length()).mapNotNull { parseCloudFile(arr.getJSONObject(it)) }
+                }
+                trimmed.startsWith('{') -> {
+                    val obj = JSONObject(body)
                     when {
-                        obj.has("files") -> obj.getAsJsonArray("files").mapNotNull { parseCloudFile(it.asJsonObject) }
+                        obj.has("files") -> {
+                            val arr = obj.getJSONArray("files")
+                            (0 until arr.length()).mapNotNull { parseCloudFile(arr.getJSONObject(it)) }
+                        }
                         obj.has("data") -> {
                             val data = obj.get("data")
-                            if (data.isJsonArray) data.asJsonArray.mapNotNull { parseCloudFile(it.asJsonObject) }
-                            else if (data.isJsonObject) listOfNotNull(parseCloudFile(data.asJsonObject))
-                            else emptyList()
+                            when (data) {
+                                is JSONArray -> (0 until data.length()).mapNotNull { parseCloudFile(data.getJSONObject(it)) }
+                                is JSONObject -> listOfNotNull(parseCloudFile(data))
+                                else -> emptyList()
+                            }
                         }
                         obj.has("uniqueFilename") -> listOfNotNull(parseCloudFile(obj))
                         else -> emptyList()
@@ -73,13 +80,13 @@ class CloudStorageRepository(private val auth: AuthRepository) {
         }
     }
 
-    private fun parseCloudFile(obj: JsonObject): CloudFile? {
-        val filename = obj.get("uniqueFilename")?.asString ?: return null
-        val length = obj.get("length")?.asLong ?: 0L
-        val modified = obj.get("lastModified")?.asString
-            ?: obj.get("uploaded")?.asString
-            ?: obj.get("updated")?.asString
-            ?: obj.get("dateModified")?.asString
+    private fun parseCloudFile(obj: JSONObject): CloudFile? {
+        val filename = obj.optString("uniqueFilename").takeIf { it.isNotEmpty() } ?: return null
+        val length = obj.optLong("length", 0L)
+        val modified = obj.optString("lastModified").takeIf { it.isNotEmpty() }
+            ?: obj.optString("uploaded").takeIf { it.isNotEmpty() }
+            ?: obj.optString("updated").takeIf { it.isNotEmpty() }
+            ?: obj.optString("dateModified").takeIf { it.isNotEmpty() }
         return CloudFile(filename, length, modified)
     }
 
