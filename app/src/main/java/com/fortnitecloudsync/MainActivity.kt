@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
                             onDownloadAll = { viewModel.downloadAllFiles(this@MainActivity) },
                             onUpload = { uploadLauncher.launch(arrayOf("*/*")) },
                             onDelete = { file -> viewModel.deleteFile(file) },
+                            onLogout = { viewModel.logout() },
                             formatSize = { viewModel.formatFileSize(it) },
                             formatDate = { viewModel.formatDate(it) }
                         )
