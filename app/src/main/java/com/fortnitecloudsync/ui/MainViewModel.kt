@@ -13,8 +13,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import org.json.JSONException
-import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -38,17 +36,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val state: StateFlow<AppState> = _state.asStateFlow()
 
     private val timestampFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-    private val pythonRawCodePattern = Regex("^[a-zA-Z0-9]{20,40}$")
-    private val fallbackRawCodePattern = Regex("^[A-Za-z0-9._~-]{20,512}$")
-    private val codeQueryPattern = Regex("""(?:^|[?&#])code=([^&\s#]+)""", RegexOption.IGNORE_CASE)
-    private val authorizationCodeFieldPattern = Regex(
-        """["']authorizationCode["']\s*:\s*["']([^"']+)["']""",
-        RegexOption.IGNORE_CASE
-    )
-    private val redirectUrlFieldPattern = Regex(
-        """["']redirectUrl["']\s*:\s*["']([^"']+)["']""",
-        RegexOption.IGNORE_CASE
-    )
 
     init {
         log("Ready. Please login with your Epic Games account.")
@@ -60,30 +47,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun authenticate(input: String) {
         log("Received input: ${input.take(100)}${if (input.length > 100) "..." else ""}")
-        
-        val code = extractCode(input)
-        if (code == null) {
-            log("❌ No authorization code found in input.")
-            log("Please paste the FULL URL, JSON response, or the code itself.")
-            log("Input started with: ${input.take(50)}")
-            return
-        }
-        log("✅ Authorization code extracted: ${code.take(6)}...${code.takeLast(4)}")
-        log("Authenticating with Epic Games...")
-        viewModelScope.launch {
-            _state.value = _state.value.copy(isLoading = true)
+
+        launchWithLoading {
+            val code = authRepository.extractCode(input)
+            if (code == null) {
+                log("❌ No authorization code found in input.")
+                log("Please paste the FULL URL, JSON response, or the code itself.")
+                log("Input started with: ${input.take(50)}")
+                return@launchWithLoading
+            }
+
+            log("✅ Authorization code extracted: ${code.take(6)}...${code.takeLast(4)}")
+            log("Authenticating with Epic Games...")
+
             authRepository.exchangeCode(code)
                 .onSuccess { message ->
                     log(message)
-                    _state.value = _state.value.copy(
-                        isAuthenticated = true,
-                        isLoading = false
-                    )
+                    _state.value = _state.value.copy(isAuthenticated = true)
                     refreshFilesInternal()
                 }
                 .onFailure { e ->
                     log("❌ Authentication failed: ${e.message}")
-                    _state.value = _state.value.copy(isLoading = false)
                 }
         }
     }
@@ -117,10 +101,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         log("Fetching cloud storage file list...")
         cloudRepository.listFiles(_state.value.filterRestricted)
             .onSuccess { (files, filteredCount) ->
-                val msg = if (filteredCount > 0)
+                val msg = if (filteredCount > 0) {
                     "Found ${files.size} files in cloud storage (filtered $filteredCount restricted files)"
-                else
+                } else {
                     "Found ${files.size} files in cloud storage"
+                }
                 log(msg)
                 _state.value = _state.value.copy(cloudFiles = files)
             }
@@ -260,7 +245,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val parsed = SimpleDateFormat(fmt, Locale.US).parse(dateStr) ?: continue
                 return output.format(parsed)
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
         }
         return dateStr
     }
@@ -272,102 +258,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         current.add(entry)
         if (current.size > 200) current.removeAt(0)
         _state.value = _state.value.copy(statusMessages = current)
-    }
-
-    private fun extractCode(input: String): String? {
-        val trimmed = input.trim()
-        log("extractCode: Processing input (length: ${trimmed.length})")
-
-        extractCodeFromPayload(trimmed)?.let { return it }
-
-        val compact = trimmed.replace(Regex("\\s+"), "")
-        if (compact != trimmed) {
-            log("extractCode: Retrying after removing whitespace (length: ${compact.length})")
-            extractCodeFromPayload(compact)?.let { return it }
-        }
-
-        log("extractCode: Unknown format, starts with: ${trimmed.take(30)}")
-        return null
-    }
-
-    private fun extractCodeFromPayload(payload: String): String? {
-        if (payload.startsWith('{') && payload.endsWith('}')) {
-            log("extractCode: Detected JSON format")
-            try {
-                val json = JSONObject(payload)
-                val authCode = json.optString("authorizationCode")
-                if (authCode.isNotEmpty()) {
-                    log("extractCode: JSON authorizationCode field length: ${authCode.length}")
-                    return authCode
-                }
-
-                val redirectUrl = json.optString("redirectUrl")
-                if (redirectUrl.isNotEmpty()) {
-                    log("extractCode: JSON redirectUrl field length: ${redirectUrl.length}")
-                    extractCodeFromUrl(redirectUrl)?.let { return it }
-                }
-            } catch (_: JSONException) {
-                log("extractCode: JSON parsing failed")
-            }
-        }
-
-        if (payload.startsWith("http")) {
-            log("extractCode: Detected URL format")
-            extractCodeFromUrl(payload)?.let { return it }
-        }
-
-        authorizationCodeFieldPattern.find(payload)?.groupValues?.get(1)?.let { authCode ->
-            log("extractCode: authorizationCode pattern match length: ${authCode.length}")
-            return authCode
-        }
-
-        redirectUrlFieldPattern.find(payload)?.groupValues?.get(1)?.let { redirectUrl ->
-            log("extractCode: redirectUrl pattern match length: ${redirectUrl.length}")
-            extractCodeFromUrl(redirectUrl)?.let { return it }
-        }
-
-        codeQueryPattern.find(payload)?.groupValues?.get(1)?.let { code ->
-            log("extractCode: query pattern match length: ${code.length}")
-            return code
-        }
-
-        if (pythonRawCodePattern.matches(payload)) {
-            log("extractCode: Detected Python-style raw code format (length: ${payload.length})")
-            return payload
-        }
-
-        if (fallbackRawCodePattern.matches(payload)) {
-            log("extractCode: Detected fallback raw code format (length: ${payload.length})")
-            return payload
-        }
-
-        return null
-    }
-
-    private fun extractCodeFromUrl(url: String): String? {
-        log("extractCodeFromUrl: Parsing URL: ${url.take(80)}...")
-        return try {
-            val uri = Uri.parse(url)
-            val code = uri.getQueryParameter("code")
-            if (code != null) {
-                log("extractCodeFromUrl: Found code length: ${code.length}")
-                code
-            } else {
-                codeQueryPattern.find(url)?.groupValues?.get(1)?.also {
-                    log("extractCodeFromUrl: Regex fallback code length: ${it.length}")
-                } ?: run {
-                    log("extractCodeFromUrl: No 'code' parameter found in URL")
-                    null
-                }
-            }
-        } catch (_: Exception) {
-            codeQueryPattern.find(url)?.groupValues?.get(1)?.also {
-                log("extractCodeFromUrl: URL parsing failed, regex fallback code length: ${it.length}")
-            } ?: run {
-                log("extractCodeFromUrl: URL parsing failed")
-                null
-            }
-        }
     }
 
     private fun getFilenameFromUri(context: Context, uri: Uri): String {

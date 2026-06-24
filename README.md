@@ -1,11 +1,18 @@
 # FortniteCloudSettingsSync
 A tool used to download or upload Fortnite "ClientSettings.sav" and related files directly to your Epic Games account storage. Can be used to share your settings with others, backup your settings, or apply another persons settings to your own account for the next time you launch Fortnite.
 
-## Setup
+## Desktop Setup
 - Open the extracted folder in command prompt and run ``pip install -r requirements.txt``
 - Once complete, either directly run the ``FortniteCloudSettingsSync.py`` file or run ``py FortniteCloudSettingsSync.py`` in the same command prompt window.
 
+## Android App
+The Android app now embeds the Python backend with Chaquopy, so the auth and cloud-storage logic stays in Python instead of being reimplemented in Kotlin.
+
+To build it:
+- Open the `app/` module in Android Studio, or run the `Android CI` GitHub Actions workflow.
+- The Android build uses Python 3.12 and installs `requests` automatically through the Gradle `chaquopy` block.
+
 ## Usage
-- Using the GUI, authenticate with your Epic Games account, and copy the entire JSON response you are given into the input field, and authenticate.
+- Using the GUI, authenticate with your Epic Games account, then paste the full URL, JSON response, or raw authorization code into the input field and authenticate.
 - You should see a list of files in your account Epic Cloud Storage. You can download these to share with others or upload your own. Technically you can upload any file to your account storage, though I'm not sure of the implications of that or the storage limits. The script automatically replaces files already in your cloud storage with the same name when you upload them.
 - If you have Fortnite open, you should not be logged out by using this script, but opening Fortnite while this script is opened will require you to authenticate the script again.
