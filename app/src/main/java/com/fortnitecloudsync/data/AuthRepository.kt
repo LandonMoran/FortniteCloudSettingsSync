@@ -4,6 +4,7 @@ import android.util.Base64
 import com.fortnitecloudsync.data.remote.NetworkModule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 // Authentication repository matching Python script exactly
 class AuthRepository {
@@ -18,6 +19,11 @@ class AuthRepository {
 
     val isAuthenticated: Boolean
         get() = accessToken != null && accountId != null
+
+    fun clearSession() {
+        accessToken = null
+        accountId = null
+    }
 
     fun getAuthorizationUrl(): String =
         "https://www.epicgames.com/id/logout?redirectUrl=https%3A//www.epicgames.com/id/login%3FredirectUrl%3Dhttps%253A//www.epicgames.com/id/api/redirect%253FclientId%253Dec684b8c687f479fadea3cb2ad83f5c6%2526responseType%253Dcode"
@@ -49,8 +55,16 @@ class AuthRepository {
                     Result.failure(Exception("Authentication failed: Missing token or account ID"))
                 }
             } else {
-                val errorBody = response.errorBody()?.string() ?: "Unknown error"
-                Result.failure(Exception("Authentication failed: ${response.code()}\nError: $errorBody"))
+                val errorBody = response.errorBody()?.string()
+                val errorMessage = try {
+                    errorBody?.let { JSONObject(it).optString("errorMessage") }
+                        ?.takeIf { it.isNotBlank() }
+                        ?: errorBody
+                        ?: "Unknown error"
+                } catch (_: Exception) {
+                    errorBody ?: "Unknown error"
+                }
+                Result.failure(Exception("Authentication failed: ${response.code()}\nError: $errorMessage"))
             }
         } catch (e: Exception) {
             Result.failure(Exception("Network error during authentication: ${e.message}"))

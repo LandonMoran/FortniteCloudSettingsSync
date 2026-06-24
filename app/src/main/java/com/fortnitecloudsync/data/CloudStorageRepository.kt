@@ -1,5 +1,6 @@
 package com.fortnitecloudsync.data
 
+import android.net.Uri
 import android.util.Log
 import com.fortnitecloudsync.data.model.CloudFile
 import com.fortnitecloudsync.data.remote.NetworkModule
@@ -9,7 +10,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.URLEncoder
 import java.util.regex.Pattern
 
 class CloudStorageRepository(private val auth: AuthRepository) {
@@ -29,6 +29,8 @@ class CloudStorageRepository(private val auth: AuthRepository) {
         if (uuidPattern.matcher(filename).matches()) return false
         return true
     }
+
+    private fun encodeFilename(filename: String): String = Uri.encode(filename)
 
     suspend fun listFiles(filterRestricted: Boolean = true): Result<Pair<List<CloudFile>, Int>> =
         withContext(Dispatchers.IO) {
@@ -116,7 +118,7 @@ class CloudStorageRepository(private val auth: AuthRepository) {
         if (!auth.isAuthenticated) return@withContext Result.failure(Exception("Authentication required"))
         if (!isFileAllowed(filename)) return@withContext Result.failure(Exception("File is restricted"))
         try {
-            val encoded = URLEncoder.encode(filename, "UTF-8")
+            val encoded = encodeFilename(filename)
             Log.d(TAG, "Downloading file: $filename (encoded: $encoded)")
             
             val response = NetworkModule.fortniteApi.downloadFile(
@@ -148,7 +150,7 @@ class CloudStorageRepository(private val auth: AuthRepository) {
                 val fileExists = listFiles(false)
                     .getOrNull()?.first
                     ?.any { it.uniqueFilename == filename } == true
-                val encoded = URLEncoder.encode(filename, "UTF-8")
+                val encoded = encodeFilename(filename)
                 val body = data.toRequestBody("application/octet-stream".toMediaType())
                 
                 Log.d(TAG, "Uploading file: $filename (encoded: $encoded)")
@@ -181,7 +183,7 @@ class CloudStorageRepository(private val auth: AuthRepository) {
         if (!auth.isAuthenticated) return@withContext Result.failure(Exception("Authentication required"))
         if (!isFileAllowed(filename)) return@withContext Result.failure(Exception("File is restricted"))
         try {
-            val encoded = URLEncoder.encode(filename, "UTF-8")
+            val encoded = encodeFilename(filename)
             Log.d(TAG, "Deleting file: $filename (encoded: $encoded)")
             
             val response = NetworkModule.fortniteApi.deleteFile(

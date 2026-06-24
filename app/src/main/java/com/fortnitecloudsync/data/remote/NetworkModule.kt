@@ -8,11 +8,6 @@ import java.util.concurrent.TimeUnit
 
 object NetworkModule {
 
-    private val baseHeaders = mapOf(
-        "User-Agent" to "Fortnite/++UE4+Release-4.25-CL-14930499 Windows/10.0.19041.1.256.64bit",
-        "Accept" to "application/json"
-    )
-
     private fun buildOkHttpClient(): OkHttpClient {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY // Changed to BODY for debugging
@@ -22,14 +17,6 @@ object NetworkModule {
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
-            .addInterceptor { chain ->
-                val request = chain.request().newBuilder().apply {
-                    baseHeaders.forEach { (key, value) ->
-                        addHeader(key, value)
-                    }
-                }.build()
-                chain.proceed(request)
-            }
             .addInterceptor(loggingInterceptor)
             .build()
     }

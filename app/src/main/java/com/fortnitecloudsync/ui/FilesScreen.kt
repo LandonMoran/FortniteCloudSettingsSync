@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -57,12 +58,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.fortnitecloudsync.data.model.CloudFile
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -84,6 +90,7 @@ fun FilesScreen(
     val logListState = rememberLazyListState()
     val context = LocalContext.current
     val clipboardManager = remember { context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager }
+    val composeClipboardManager = LocalClipboardManager.current
 
     LaunchedEffect(state.statusMessages.size) {
         if (state.statusMessages.isNotEmpty()) {
@@ -302,19 +309,27 @@ fun FilesScreen(
                             OutlinedButton(
                                 onClick = {
                                     val fullLog = state.statusMessages.joinToString("\n")
-                                    clipboardManager?.setPrimaryClip(ClipData.newPlainText("Fortnite Sync Log", fullLog))
+                                    composeClipboardManager.setText(AnnotatedString(fullLog))
+                                    clipboardManager?.setPrimaryClip(
+                                        ClipData.newPlainText("Fortnite Sync Log", fullLog)
+                                    )
                                     Toast.makeText(context, "Log copied to clipboard", Toast.LENGTH_SHORT).show()
                                 },
-                                modifier = Modifier.height(28.dp),
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .semantics {
+                                        contentDescription = listOf("Copy log to clipboard")
+                                        role = Role.Button
+                                    },
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)
                             ) {
                                 Icon(
                                     Icons.Default.ContentCopy,
                                     contentDescription = "Copy",
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
-                                Spacer(Modifier.width(4.dp))
-                                Text("Copy Log", fontSize = 11.sp)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Copy Log", fontSize = 13.sp)
                             }
                         }
                     }
