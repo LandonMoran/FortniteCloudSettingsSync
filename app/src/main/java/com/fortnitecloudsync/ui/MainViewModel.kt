@@ -41,6 +41,7 @@ class MainViewModel : ViewModel() {
     init {
         log("Ready. Please login with your Epic Games account.")
         log("Uploading a file will replace any existing file with the same name.")
+        log("Note: UUID-named files and some platform files (e.g. Switch) are restricted and filtered out by default.")
     }
 
     fun getAuthorizationUrl(): String = authRepository.getAuthorizationUrl()
@@ -78,9 +79,12 @@ class MainViewModel : ViewModel() {
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true)
             cloudRepository.listFiles(_state.value.filterRestricted)
-                .onSuccess { files ->
-                    val filteredNote = if (_state.value.filterRestricted) " (restricted files hidden)" else ""
-                    log("Found ${files.size} files in cloud storage$filteredNote")
+                .onSuccess { (files, filteredCount) ->
+                    val msg = if (filteredCount > 0)
+                        "Found ${files.size} files in cloud storage (filtered $filteredCount restricted files)"
+                    else
+                        "Found ${files.size} files in cloud storage"
+                    log(msg)
                     _state.value = _state.value.copy(cloudFiles = files, isLoading = false)
                 }
                 .onFailure { e ->
@@ -187,7 +191,7 @@ class MainViewModel : ViewModel() {
                     }
             }
             log("Upload complete: $successful/${uris.size} succeeded, $failed failed")
-            if (successful > 0) refreshFiles()
+            refreshFiles()
         }
     }
 
@@ -213,6 +217,7 @@ class MainViewModel : ViewModel() {
             "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'",
             "yyyy-MM-dd'T'HH:mm:ss'Z'",
             "yyyy-MM-dd'T'HH:mm:ss.SSS",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
             "yyyy-MM-dd'T'HH:mm:ss"
         )
         val output = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
