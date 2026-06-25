@@ -266,6 +266,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return dateStr
     }
 
+    // Public hook so UI (e.g. the in-app WebView login) can record progress in
+    // the same status log the user can read and copy.
+    fun appendLog(message: String) = log(message)
+
     private fun log(message: String) {
         val ts = timestampFormat.format(Date())
         val entry = "[$ts] $message"

@@ -120,8 +120,7 @@ fun LoginScreen(
 
                 Button(
                     onClick = onWebLogin,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isLoading
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Default.Login, contentDescription = null)
                     Spacer(Modifier.width(8.dp))

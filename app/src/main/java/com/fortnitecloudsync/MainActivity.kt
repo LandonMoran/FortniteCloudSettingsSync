@@ -50,12 +50,16 @@ class MainActivity : ComponentActivity() {
                                 showWebLogin = false
                                 viewModel.authenticate(captured)
                             },
-                            onCancel = { showWebLogin = false }
+                            onCancel = { showWebLogin = false },
+                            onLog = { msg -> viewModel.appendLog(msg) }
                         )
                     } else if (!state.isAuthenticated) {
                         LoginScreen(
                             onLogin = { viewModel.getAuthorizationUrl() },
-                            onWebLogin = { showWebLogin = true },
+                            onWebLogin = {
+                                viewModel.appendLog("🌐 Opening in-app Epic sign-in…")
+                                showWebLogin = true
+                            },
                             onAuthenticate = { code -> viewModel.authenticate(code) },
                             isLoading = state.isLoading,
                             statusMessages = state.statusMessages

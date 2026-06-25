@@ -3,6 +3,8 @@ package com.fortnitecloudsync.ui
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.webkit.CookieManager
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
@@ -47,7 +49,8 @@ import org.json.JSONTokener
 fun WebLoginScreen(
     authUrl: String,
     onCodeCaptured: (String) -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    onLog: (String) -> Unit = {}
 ) {
     var loading by remember { mutableStateOf(true) }
     var captured by remember { mutableStateOf(false) }
@@ -56,6 +59,7 @@ fun WebLoginScreen(
     BackHandler(onBack = onCancel)
 
     val webView = remember {
+        onLog("🌐 In-app sign-in opened; loading Epic login…")
         CookieManager.getInstance().setAcceptCookie(true)
         WebView(context).apply {
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
@@ -68,6 +72,7 @@ fun WebLoginScreen(
 
                 override fun onPageFinished(view: WebView, url: String?) {
                     loading = false
+                    onLog("Page loaded: ${url?.substringBefore('?')?.take(60) ?: "?"}")
                     // The redirect endpoint returns the authorizationCode JSON.
                     if (!captured && url != null && url.contains("/id/api/redirect")) {
                         view.evaluateJavascript("document.body.innerText") { raw ->
@@ -75,9 +80,20 @@ fun WebLoginScreen(
                                 .getOrNull() ?: raw
                             if (!captured && text != null && text.contains("authorizationCode")) {
                                 captured = true
+                                onLog("✅ Captured authorization code from Epic")
                                 onCodeCaptured(text)
                             }
                         }
+                    }
+                }
+
+                override fun onReceivedError(
+                    view: WebView?,
+                    request: WebResourceRequest?,
+                    error: WebResourceError?
+                ) {
+                    if (request?.isForMainFrame == true) {
+                        onLog("❌ WebView error: ${error?.description ?: "unknown"}")
                     }
                 }
             }
