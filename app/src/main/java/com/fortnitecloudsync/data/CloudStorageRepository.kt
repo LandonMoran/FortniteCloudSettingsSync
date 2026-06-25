@@ -80,5 +80,12 @@ class CloudStorageRepository(private val auth: AuthRepository) {
         }
     }
 
-    fun formatSize(bytes: Long): String = PythonBackend.formatSize(bytes)
+    // Pure-Kotlin formatting (matches the Python format_size output). This is called
+    // from Compose during composition for every file row, so it must not block the UI
+    // thread with a synchronous Chaquopy/Python interop call.
+    fun formatSize(bytes: Long): String = when {
+        bytes >= 1024 * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
+        bytes >= 1024 -> "%.1f KB".format(bytes / 1024.0)
+        else -> "$bytes bytes"
+    }
 }

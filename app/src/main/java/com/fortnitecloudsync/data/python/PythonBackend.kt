@@ -87,8 +87,6 @@ object PythonBackend {
     fun deleteFile(uniqueFilename: String): String =
         callString("delete_file", uniqueFilename)
 
-    fun formatSize(bytesCount: Long): String = callString("format_size", bytesCount)
-
     private fun parseCloudFiles(filesArray: JSONArray): List<CloudFile> {
         val files = ArrayList<CloudFile>(filesArray.length())
         for (i in 0 until filesArray.length()) {
