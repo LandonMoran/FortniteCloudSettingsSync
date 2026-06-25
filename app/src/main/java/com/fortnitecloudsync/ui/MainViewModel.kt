@@ -80,8 +80,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logout() {
-        authRepository.clearSession()
+        // Reset the UI first so the user always lands back on the login screen —
+        // the transition must never depend on the backend call below.
         _state.value = AppState()
+        // Guard the backend session-clear. Every other call into the embedded
+        // Python bridge is wrapped in error handling; logout was the lone
+        // exception, so any throwable from clearSession() propagated uncaught on
+        // the main thread and crashed the entire app. The session is already
+        // gone from the UI's perspective, so a cleanup failure is non-fatal.
+        runCatching { authRepository.clearSession() }
+            .onFailure { e -> log("⚠️ Backend logout cleanup failed: ${e.message}") }
         log("Logged out. Please login again.")
     }
 
