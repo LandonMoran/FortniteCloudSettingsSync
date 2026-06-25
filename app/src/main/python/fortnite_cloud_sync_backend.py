@@ -20,10 +20,14 @@ CLIENT_ID = "ec684b8c687f479fadea3cb2ad83f5c6"
 CLIENT_SECRET = "e1f31c211f28413186262d37a13fc84d"
 ACCOUNT_BASE_URL = "https://account-public-service-prod.ol.epicgames.com"
 FORTNITE_BASE_URL = "https://fortnite-public-service-prod11.ol.epicgames.com"
+# Direct authorization-code redirect (community-standard flow). Returns the
+# authorizationCode JSON immediately when the user is already signed in to
+# epicgames.com, and routes through Epic's login first when they aren't. This
+# avoids the older logout -> login -> redirect chain, which adds two redirect
+# hops that are fragile in a mobile browser.
 AUTHORIZATION_URL = (
-    "https://www.epicgames.com/id/logout?redirectUrl=https%3A//www.epicgames.com/id/login%3F"
-    "redirectUrl%3Dhttps%253A//www.epicgames.com/id/api/redirect%253F"
-    "clientId%253Dec684b8c687f479fadea3cb2ad83f5c6%2526responseType%253Dcode"
+    "https://www.epicgames.com/id/api/redirect"
+    f"?clientId={CLIENT_ID}&responseType=code"
 )
 
 RESTRICTED_FILES = {"ClientSettingsSwitch.Sav"}
