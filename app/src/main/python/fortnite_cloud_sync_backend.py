@@ -18,7 +18,7 @@ import requests
 
 CLIENT_ID = "ec684b8c687f479fadea3cb2ad83f5c6"
 CLIENT_SECRET = "e1f31c211f28413186262d37a13fc84d"
-ACCOUNT_BASE_URL = "https://account-public-service-prod03.ol.epicgames.com"
+ACCOUNT_BASE_URL = "https://account-public-service-prod.ol.epicgames.com"
 FORTNITE_BASE_URL = "https://fortnite-public-service-prod11.ol.epicgames.com"
 AUTHORIZATION_URL = (
     "https://www.epicgames.com/id/logout?redirectUrl=https%3A//www.epicgames.com/id/login%3F"
@@ -184,6 +184,9 @@ class EpicGamesAuth:
             try:
                 error_data = response.json()
                 error_msg = error_data.get("errorMessage", "Unknown error")
+                error_code = error_data.get("errorCode", "")
+                if error_code:
+                    error_msg = f"{error_msg} [{error_code}]"
             except Exception:
                 error_msg = response.text
             return False, f"Authentication failed: {response.status_code}\nError: {error_msg}"
