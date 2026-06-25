@@ -65,6 +65,12 @@ fun WebLoginScreen(
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
+            // Present as a normal mobile Chrome browser (not an "; wv" WebView) so
+            // Epic serves its standard mobile login page and is less likely to flag
+            // the embedded client.
+            settings.userAgentString =
+                "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/120.0.0.0 Mobile Safari/537.36"
             webViewClient = object : WebViewClient() {
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                     loading = true
@@ -72,12 +78,15 @@ fun WebLoginScreen(
 
                 override fun onPageFinished(view: WebView, url: String?) {
                     loading = false
-                    onLog("Page loaded: ${url?.substringBefore('?')?.take(60) ?: "?"}")
-                    // The redirect endpoint returns the authorizationCode. Android's
-                    // WebView may render that JSON through a viewer that reformats it
-                    // (unquoted keys etc.), so pull the code value out directly in JS
-                    // with a tolerant pattern rather than re-parsing the page text.
-                    if (!captured && url != null && url.contains("/id/api/redirect")) {
+                    val path = url?.substringBefore('?') ?: ""
+                    onLog("Page loaded: ${path.take(60).ifEmpty { "?" }}")
+                    // Only capture on the ACTUAL code page. Match the path, not the
+                    // whole URL — the logout/login pages carry "id/api/redirect" in
+                    // their query string, and matching that would fire capture (and
+                    // close the screen) before the user ever sees the login form.
+                    // Android's WebView may render the code JSON through a viewer that
+                    // reformats it, so read the code value out directly in JS.
+                    if (!captured && path.endsWith("/id/api/redirect")) {
                         val js = "(function(){" +
                             "var t=(document.body&&document.body.innerText)||'';" +
                             "var m=t.match(/authorizationCode[^a-zA-Z0-9]{0,12}([a-zA-Z0-9]{20,48})/);" +
