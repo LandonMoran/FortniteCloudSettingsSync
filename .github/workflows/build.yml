@@ -10,6 +10,8 @@ jobs:
   build:
     name: Build debug APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to publish the rolling release below
 
     steps:
       - name: Checkout
@@ -38,9 +40,25 @@ jobs:
       - name: Build debug APK
         run: gradle assembleDebug
 
-      - name: Upload debug APK
+      - name: Upload debug APK (zipped CI artifact)
         uses: actions/upload-artifact@v4
         with:
           name: FortniteCloudSync-debug-${{ github.sha }}
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
+
+      # Publish the APK to a rolling "android-latest" release so it can be
+      # installed directly from a stable link (no zip, no extraction):
+      #   https://github.com/<owner>/<repo>/releases/download/android-latest/app-debug.apk
+      # Only on direct pushes (not pull requests).
+      - name: Publish rolling debug release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-latest
+          name: Latest Android build (debug)
+          prerelease: true
+          body: |
+            Automatically built from `${{ github.ref_name }}` (${{ github.sha }}).
+            Tap **app-debug.apk** below on your phone to install or update in place.
+          files: app/build/outputs/apk/debug/app-debug.apk
