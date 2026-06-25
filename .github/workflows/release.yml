@@ -1,23 +1,44 @@
 name: Android Release
 
-# Triggered by version tags: git tag v1.2.3 && git push --tags
+# Auto-publishes a GitHub Release whenever the versionName in
+# app/build.gradle.kts doesn't yet have a matching tag. Bump the version, merge
+# to main, and this cuts the release (creates the tag, builds + attaches the
+# signed APKs). Can also be run manually via the Actions tab.
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   release:
     name: Build & publish release
     runs-on: ubuntu-latest
-    permissions:
-      contents: write   # needed to create GitHub releases
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Determine version
+        id: ver
+        run: |
+          VERSION=$(grep -oE 'versionName = "[^"]+"' app/build.gradle.kts | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag v$VERSION already exists — skipping release."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Will release v$VERSION."
+          fi
 
       - name: Set up JDK 17
+        if: steps.ver.outputs.exists == 'false'
         uses: actions/setup-java@v4
         with:
           java-version: '17'
@@ -25,72 +46,42 @@ jobs:
           cache: gradle
 
       - name: Set up Python 3.12
+        if: steps.ver.outputs.exists == 'false'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Set up Gradle
+        if: steps.ver.outputs.exists == 'false'
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.6'
 
       - name: Create local.properties
+        if: steps.ver.outputs.exists == 'false'
         run: echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
 
-      # ---------------------------------------------------------------
-      # Optional: decode the keystore stored as a base64 secret so the
-      # release build is signed.  Add these four secrets to your repo
-      # (Settings → Secrets → Actions) to enable signed releases:
-      #
-      #   KEYSTORE_BASE64     — base64 of your .jks / .keystore file
-      #                         (run: base64 -w 0 release.keystore)
-      #   KEYSTORE_PASSWORD   — store password
-      #   KEY_ALIAS           — key alias inside the keystore
-      #   KEY_PASSWORD        — key password
-      #
-      # Without these secrets the release APK is unsigned; the debug APK
-      # (which uses the auto-generated debug key) is always installable.
-      # ---------------------------------------------------------------
-      - name: Decode keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      - name: Build APKs
+        if: steps.ver.outputs.exists == 'false'
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > /tmp/release.keystore
-            echo "KEYSTORE_FILE=/tmp/release.keystore" >> "$GITHUB_ENV"
-          fi
+          gradle assembleRelease
+          gradle assembleDebug
 
-      - name: Build release APK
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: gradle assembleRelease
-
-      - name: Build debug APK
-        run: gradle assembleDebug
-
-      - name: Locate APKs
-        id: apks
+      - name: Stage APKs
+        if: steps.ver.outputs.exists == 'false'
         run: |
-          RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
-          DEBUG_APK=$(find app/build/outputs/apk/debug   -name "*.apk" | head -1)
-          echo "release=$RELEASE_APK" >> "$GITHUB_OUTPUT"
-          echo "debug=$DEBUG_APK"     >> "$GITHUB_OUTPUT"
-          echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          cp "$(find app/build/outputs/apk/release -name '*.apk' | head -1)" \
+             "FortniteCloudSync-v${{ steps.ver.outputs.version }}-release.apk"
+          cp "$(find app/build/outputs/apk/debug -name '*.apk' | head -1)" \
+             "FortniteCloudSync-v${{ steps.ver.outputs.version }}-debug.apk"
 
-      - name: Rename APKs for release
-        run: |
-          cp "${{ steps.apks.outputs.release }}" \
-             "FortniteCloudSync-${{ steps.apks.outputs.tag }}-release.apk"
-          cp "${{ steps.apks.outputs.debug }}" \
-             "FortniteCloudSync-${{ steps.apks.outputs.tag }}-debug.apk"
-
-      - name: Create GitHub Release
+      - name: Create tag and GitHub Release
+        if: steps.ver.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
-          name: "Fortnite Cloud Sync ${{ steps.apks.outputs.tag }}"
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: "Fortnite Cloud Sync v${{ steps.ver.outputs.version }}"
           body_path: CHANGELOG.md
           files: |
-            FortniteCloudSync-${{ steps.apks.outputs.tag }}-release.apk
-            FortniteCloudSync-${{ steps.apks.outputs.tag }}-debug.apk
+            FortniteCloudSync-v${{ steps.ver.outputs.version }}-release.apk
+            FortniteCloudSync-v${{ steps.ver.outputs.version }}-debug.apk
