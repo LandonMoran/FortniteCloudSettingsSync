@@ -82,6 +82,8 @@ jobs:
           tag_name: v${{ steps.ver.outputs.version }}
           name: "Fortnite Cloud Sync v${{ steps.ver.outputs.version }}"
           body_path: CHANGELOG.md
+          # Hyphenated versions (e.g. 1.0.1-beta1) are pre-releases.
+          prerelease: ${{ contains(steps.ver.outputs.version, '-') }}
           files: |
             FortniteCloudSync-v${{ steps.ver.outputs.version }}-release.apk
             FortniteCloudSync-v${{ steps.ver.outputs.version }}-debug.apk

@@ -12,8 +12,8 @@ android {
         applicationId = "com.fortnitecloudsync"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1-beta1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -56,11 +56,12 @@ android {
 
     buildTypes {
         release {
-            // Minification is disabled for the 1.0 release so the release build
-            // behaves exactly like the (extensively tested) debug build. R8 +
-            // Chaquopy/Compose needs runtime verification before it can be safely
-            // re-enabled.
-            isMinifyEnabled = false
+            // 1.0.1-beta1: enable R8 code shrinking/obfuscation + resource
+            // shrinking to compress the Kotlin/Compose code (the embedded Python
+            // runtime is unaffected). Beta because R8 + Chaquopy/Compose needs
+            // on-device verification (see keep rules in proguard-rules.pro).
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

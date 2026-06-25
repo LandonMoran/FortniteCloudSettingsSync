@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## [1.0.1-beta1] - 2026-06-25
+
+Pre-release to test code compression. **Please verify login + download still
+work before this is promoted to a stable release.**
+
+### Changed
+- Enabled R8 code shrinking/obfuscation and resource shrinking for the release
+  build to reduce APK size. This only compresses the Kotlin/Compose app code —
+  the embedded Python runtime is unaffected. Added ProGuard keep rules for
+  Chaquopy, the Python bridge, data models, and reflectively-created ViewModels.
+
 ## [1.0.0] - 2026-06-25
 
 First release of the **Android app**. It brings the desktop tool's Epic Games
