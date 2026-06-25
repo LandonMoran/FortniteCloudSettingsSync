@@ -192,7 +192,11 @@ fun FilesScreen(
 
             // Filter toggle
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics {
+                        contentDescription = "Hide restricted files, ${if (state.filterRestricted) "on" else "off"}"
+                    },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -339,7 +343,8 @@ fun FilesScreen(
                                 fontSize = 10.sp,
                                 color = when {
                                     message.contains("❌") || message.contains("error", ignoreCase = true) -> MaterialTheme.colorScheme.error
-                                    message.contains("✅") || message.contains("successful", ignoreCase = true) -> MaterialTheme.colorScheme.primary
+                                    message.contains("✅") || message.contains("succeeded") || message.contains("successful") -> MaterialTheme.colorScheme.primary
+                                    message.contains("⬇️") || message.contains("⬆️") || message.contains("🗑️") -> MaterialTheme.colorScheme.tertiary
                                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                                 },
                                 lineHeight = 14.sp
@@ -365,7 +370,10 @@ private fun FileRow(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .semantics {
+                contentDescription = "${file.uniqueFilename}, ${formatSize(file.length)}, ${formatDate(file.lastModified)}, ${if (isSelected) "selected" else "tap to select"}"
+            },
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected)
                 MaterialTheme.colorScheme.primaryContainer

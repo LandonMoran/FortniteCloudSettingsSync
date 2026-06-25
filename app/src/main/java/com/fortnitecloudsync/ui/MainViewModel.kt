@@ -47,19 +47,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun getAuthorizationUrl(): String = authRepository.getAuthorizationUrl()
 
     fun authenticate(input: String) {
-        log("Received input: ${input.take(100)}${if (input.length > 100) "..." else ""}")
-
         launchWithLoading {
             val code = authRepository.extractCode(input)
             if (code == null) {
                 log("❌ No authorization code found in input.")
                 log("Please paste the FULL URL, JSON response, or the code itself.")
-                log("Input started with: ${input.take(50)}")
                 return@launchWithLoading
             }
 
-            log("✅ Authorization code extracted: ${code.take(6)}...${code.takeLast(4)}")
-            log("Authenticating with Epic Games...")
+            log("🔑 Authorization code extracted: ${code.take(6)}...${code.takeLast(4)}")
+            log("🔄 Authenticating with Epic Games...")
 
             authRepository.exchangeCode(code)
                 .onSuccess { message ->
@@ -99,7 +96,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             log("Please authenticate first.")
             return
         }
-        log("Fetching cloud storage file list...")
+        log("🔄 Fetching cloud storage file list...")
         cloudRepository.listFiles(_state.value.filterRestricted)
             .onSuccess { (files, filteredCount) ->
                 val msg = if (filteredCount > 0) {
@@ -126,7 +123,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun downloadFile(context: Context, file: CloudFile) {
-        log("Downloading ${file.uniqueFilename}...")
+        log("⬇️ Downloading ${file.uniqueFilename}...")
         launchWithLoading {
             cloudRepository.downloadFile(file.uniqueFilename)
                 .onSuccess { bytes ->
@@ -150,7 +147,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             log("No files available to download")
             return
         }
-        log("Starting download of all ${files.size} files...")
+        log("⬇️ Starting download of all ${files.size} files...")
         launchWithLoading {
             var successful = 0
             var failed = 0
@@ -179,12 +176,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun uploadFiles(context: Context, uris: List<Uri>) {
         if (uris.isEmpty()) return
-        log("Starting upload of ${uris.size} file(s)...")
+        log("⬆️ Starting upload of ${uris.size} file(s)...")
         launchWithLoading {
             var successful = 0
             var failed = 0
             uris.forEachIndexed { index, uri ->
                 val filename = getFilenameFromUri(context, uri)
+                if (filename == null) {
+                    log("Could not determine filename for URI: $uri")
+                    failed++
+                    return@forEachIndexed
+                }
                 if (!cloudRepository.isFileAllowed(filename)) {
                     log("Skipping restricted file: $filename")
                     failed++
@@ -217,7 +219,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteFile(file: CloudFile) {
-        log("Deleting ${file.uniqueFilename}...")
+        log("🗑️ Deleting ${file.uniqueFilename}...")
         launchWithLoading {
             cloudRepository.deleteFile(file.uniqueFilename)
                 .onSuccess { message ->
@@ -265,13 +267,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.value = _state.value.copy(statusMessages = current)
     }
 
-    private fun getFilenameFromUri(context: Context, uri: Uri): String {
+    private fun getFilenameFromUri(context: Context, uri: Uri): String? {
         context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) {
                 val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (idx >= 0) return cursor.getString(idx)
+                if (idx >= 0) {
+                    val name = cursor.getString(idx)
+                    if (!name.isNullOrBlank()) return name
+                }
             }
         }
-        return uri.lastPathSegment ?: "unknown_file"
+        val segment = uri.lastPathSegment
+        if (!segment.isNullOrBlank()) return segment
+        return null
     }
 }

@@ -18,10 +18,14 @@ class CloudStorageRepository(private val auth: AuthRepository) {
         "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_r\\d+_a\\d+\\.sav$",
         Pattern.CASE_INSENSITIVE
     )
+    private val blacklistedPatterns: List<Pattern> = emptyList()
 
     fun isFileAllowed(filename: String): Boolean {
         if (filename in restrictedFiles) return false
         if (uuidPattern.matcher(filename).matches()) return false
+        for (pattern in blacklistedPatterns) {
+            if (pattern.matcher(filename).find()) return false
+        }
         return true
     }
 

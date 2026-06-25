@@ -196,7 +196,12 @@ fun LoginScreen(
                                 style = MaterialTheme.typography.labelSmall,
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = when {
+                                    message.contains("❌") || message.contains("error", ignoreCase = true) -> MaterialTheme.colorScheme.error
+                                    message.contains("✅") || message.contains("successful") || message.contains("succeeded") -> MaterialTheme.colorScheme.primary
+                                    message.contains("🔑") || message.contains("🔄") -> MaterialTheme.colorScheme.tertiary
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                }
                             )
                         }
                     }
