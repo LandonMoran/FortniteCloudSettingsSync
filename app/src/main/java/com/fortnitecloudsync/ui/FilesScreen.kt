@@ -1,9 +1,5 @@
 package com.fortnitecloudsync.ui
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,7 +9,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,7 +18,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExitToApp
@@ -40,7 +34,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -55,16 +48,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.role
 import com.fortnitecloudsync.data.model.CloudFile
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -84,8 +74,6 @@ fun FilesScreen(
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     val logListState = rememberLazyListState()
-    val context = LocalContext.current
-    val clipboardManager = remember { context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager }
 
     LaunchedEffect(state.statusMessages.size) {
         if (state.statusMessages.isNotEmpty()) {
@@ -304,32 +292,7 @@ fun FilesScreen(
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold
                         )
-                        if (state.statusMessages.isNotEmpty()) {
-                            OutlinedButton(
-                                onClick = {
-                                    val fullLog = state.statusMessages.joinToString("\n")
-                                    clipboardManager?.setPrimaryClip(
-                                        ClipData.newPlainText("Fortnite Sync Log", fullLog)
-                                    )
-                                    Toast.makeText(context, "Log copied to clipboard", Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier
-                                    .heightIn(min = 48.dp)
-                                    .semantics {
-                                        contentDescription = "Copy log to clipboard"
-                                        role = Role.Button
-                                    },
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.ContentCopy,
-                                    contentDescription = "Copy",
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text("Copy Log", fontSize = 13.sp)
-                            }
-                        }
+                        CopyLogButton(messages = state.statusMessages)
                     }
                     Spacer(Modifier.height(4.dp))
                     LazyColumn(
