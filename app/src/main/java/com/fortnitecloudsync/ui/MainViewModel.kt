@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fortnitecloudsync.data.AuthRepository
 import com.fortnitecloudsync.data.CloudStorageRepository
+import com.fortnitecloudsync.data.DownloadSaver
 import com.fortnitecloudsync.data.model.CloudFile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -135,15 +136,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         launchWithLoading {
             cloudRepository.downloadFile(file.uniqueFilename)
                 .onSuccess { bytes ->
-                    try {
-                        val dir = context.getExternalFilesDir(null) ?: context.filesDir
-                        val out = File(dir, file.uniqueFilename)
-                        out.writeBytes(bytes)
-                        log("Downloaded ${file.uniqueFilename} (${cloudRepository.formatSize(bytes.size.toLong())})")
-                        log("Saved to: ${out.absolutePath}")
-                    } catch (e: Exception) {
-                        log("Failed to save file: ${e.message}")
-                    }
+                    saveBytes(context, file.uniqueFilename, bytes)
+                        .onSuccess { location ->
+                            log("Downloaded ${file.uniqueFilename} (${cloudRepository.formatSize(bytes.size.toLong())})")
+                            log("Saved to: $location")
+                        }
+                        .onFailure { e -> log("Failed to save file: ${e.message}") }
                 }
                 .onFailure { e -> log("Download failed: ${e.message}") }
         }
@@ -159,18 +157,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         launchWithLoading {
             var successful = 0
             var failed = 0
-            val dir = context.getExternalFilesDir(null) ?: context.filesDir
             files.forEach { file ->
                 log("Downloading (${successful + failed + 1}/${files.size}): ${file.uniqueFilename}")
                 cloudRepository.downloadFile(file.uniqueFilename)
                     .onSuccess { bytes ->
-                        try {
-                            File(dir, file.uniqueFilename).writeBytes(bytes)
-                            successful++
-                        } catch (e: Exception) {
-                            log("Failed to save ${file.uniqueFilename}: ${e.message}")
-                            failed++
-                        }
+                        saveBytes(context, file.uniqueFilename, bytes)
+                            .onSuccess { successful++ }
+                            .onFailure { e ->
+                                log("Failed to save ${file.uniqueFilename}: ${e.message}")
+                                failed++
+                            }
                     }
                     .onFailure { e ->
                         log("Failed to download ${file.uniqueFilename}: ${e.message}")
@@ -178,9 +174,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
             }
             log("Download complete: $successful/${files.size} succeeded, $failed failed")
-            if (successful > 0) log("Files saved to: ${dir.absolutePath}")
+            if (successful > 0) log("Files saved to: Downloads/FortniteCloudSync")
         }
     }
+
+    // Saves to the public Downloads/FortniteCloudSync folder; if that fails
+    // (e.g. older Android without storage permission), falls back to the
+    // app-private folder so a download is never lost.
+    private fun saveBytes(context: Context, filename: String, bytes: ByteArray): Result<String> =
+        DownloadSaver.save(context, filename, bytes).recoverCatching { error ->
+            val dir = context.getExternalFilesDir(null) ?: context.filesDir
+            File(dir, filename).writeBytes(bytes)
+            log("⚠️ Saved to app folder (couldn't reach Downloads: ${error.message})")
+            File(dir, filename).absolutePath
+        }
 
     fun uploadFiles(context: Context, uris: List<Uri>) {
         if (uris.isEmpty()) return

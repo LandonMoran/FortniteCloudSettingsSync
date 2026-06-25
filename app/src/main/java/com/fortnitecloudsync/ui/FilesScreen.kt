@@ -138,12 +138,6 @@ fun FilesScreen(
             BottomAppBar(
                 actions = {
                     IconButton(
-                        onClick = { state.selectedFile?.let { onDownload(it) } },
-                        enabled = state.selectedFile != null && !state.isLoading
-                    ) {
-                        Icon(Icons.Default.Download, contentDescription = "Download selected")
-                    }
-                    IconButton(
                         onClick = onDownloadAll,
                         enabled = state.cloudFiles.isNotEmpty() && !state.isLoading
                     ) {
@@ -265,7 +259,8 @@ fun FilesScreen(
                         isSelected = isSelected,
                         formatSize = formatSize,
                         formatDate = formatDate,
-                        onClick = { onSelectFile(if (isSelected) null else file) }
+                        onClick = { onSelectFile(if (isSelected) null else file) },
+                        onDownload = onDownload
                     )
                 }
             }
@@ -328,7 +323,8 @@ private fun FileRow(
     isSelected: Boolean,
     formatSize: (Long) -> String,
     formatDate: (String?) -> String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDownload: (CloudFile) -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -383,6 +379,14 @@ private fun FileRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
+            // Per-file download — one tap grabs just this file (not all of them).
+            IconButton(onClick = { onDownload(file) }) {
+                Icon(
+                    Icons.Default.Download,
+                    contentDescription = "Download ${file.uniqueFilename}",
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
         }
     }
