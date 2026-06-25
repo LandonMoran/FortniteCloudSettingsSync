@@ -73,15 +73,24 @@ fun WebLoginScreen(
                 override fun onPageFinished(view: WebView, url: String?) {
                     loading = false
                     onLog("Page loaded: ${url?.substringBefore('?')?.take(60) ?: "?"}")
-                    // The redirect endpoint returns the authorizationCode JSON.
+                    // The redirect endpoint returns the authorizationCode. Android's
+                    // WebView may render that JSON through a viewer that reformats it
+                    // (unquoted keys etc.), so pull the code value out directly in JS
+                    // with a tolerant pattern rather than re-parsing the page text.
                     if (!captured && url != null && url.contains("/id/api/redirect")) {
-                        view.evaluateJavascript("document.body.innerText") { raw ->
-                            val text = runCatching { JSONTokener(raw).nextValue() as? String }
-                                .getOrNull() ?: raw
-                            if (!captured && text != null && text.contains("authorizationCode")) {
+                        val js = "(function(){" +
+                            "var t=(document.body&&document.body.innerText)||'';" +
+                            "var m=t.match(/authorizationCode[^a-zA-Z0-9]{0,12}([a-zA-Z0-9]{20,48})/);" +
+                            "return m?m[1]:'';})();"
+                        view.evaluateJavascript(js) { raw ->
+                            val code = runCatching { JSONTokener(raw).nextValue() as? String }
+                                .getOrNull()
+                            if (!captured && !code.isNullOrBlank()) {
                                 captured = true
                                 onLog("✅ Captured authorization code from Epic")
-                                onCodeCaptured(text)
+                                onCodeCaptured(code)
+                            } else if (!captured) {
+                                onLog("⚠️ Reached the code page but couldn't read the code")
                             }
                         }
                     }
