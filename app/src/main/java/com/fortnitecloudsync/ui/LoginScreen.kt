@@ -154,6 +154,10 @@ fun LoginScreen(
                 Button(
                     onClick = {
                         onAuthenticate(authInput)
+                        // Clear the field after submitting. Epic authorization codes
+                        // are single-use, so keeping the consumed code here would let
+                        // the user resubmit a dead code and get "invalid" forever.
+                        authInput = ""
                     },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isLoading && authInput.isNotBlank()

@@ -72,6 +72,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 .onFailure { e ->
                     log("❌ Authentication failed: ${e.message}")
+                    log("⚠️ Epic codes are single-use and expire in ~5 min.")
+                    log("Tap 'Login with Epic Games' to get a FRESH code, then Authenticate right away. Do not reuse a code.")
                 }
         }
     }
