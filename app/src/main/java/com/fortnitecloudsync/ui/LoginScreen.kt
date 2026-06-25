@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun LoginScreen(
     onLogin: () -> String,
+    onWebLogin: () -> Unit,
     onAuthenticate: (String) -> Unit,
     isLoading: Boolean,
     statusMessages: List<String>
@@ -111,17 +112,41 @@ fun LoginScreen(
                 Divider()
 
                 Text(
-                    text = "1. Tap the button below to open the Epic Games login page",
+                    text = "Sign in with your Epic Games account. The app opens Epic's " +
+                        "login and captures the code for you — no copy/paste.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Button(
+                    onClick = onWebLogin,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoading
+                ) {
+                    Icon(Icons.Default.Login, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Sign in with Epic Games")
+                }
+
+                Divider()
+
+                Text(
+                    text = "Trouble signing in? Use the manual method:",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "1. Open the login page in your browser",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "2. After logging in, copy the full URL or JSON from your browser",
+                    text = "2. After logging in, copy the full URL or JSON shown",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "3. Paste it in the field below and tap Authenticate",
+                    text = "3. Paste it below and tap Authenticate",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -137,7 +162,7 @@ fun LoginScreen(
                 ) {
                     Icon(Icons.Default.Login, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Login with Epic Games")
+                    Text("Open login in browser")
                 }
 
                 OutlinedTextField(

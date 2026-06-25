@@ -1,0 +1,114 @@
+package com.fortnitecloudsync.ui
+
+import android.annotation.SuppressLint
+import android.graphics.Bitmap
+import android.webkit.CookieManager
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
+import org.json.JSONTokener
+
+/**
+ * In-app Epic Games sign-in.
+ *
+ * Loads Epic's authorization-code redirect page in a WebView, lets the user log
+ * in normally, and then reads the resulting authorizationCode JSON straight off
+ * the page — no manual copy/paste. The captured text is handed to the existing
+ * [onCodeCaptured] callback, which feeds it through the unchanged authentication
+ * path (the Python backend still parses the code and exchanges it). This screen
+ * only replaces the "how the user obtains the code" step; it touches nothing in
+ * the script <-> API exchange.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+fun WebLoginScreen(
+    authUrl: String,
+    onCodeCaptured: (String) -> Unit,
+    onCancel: () -> Unit
+) {
+    var loading by remember { mutableStateOf(true) }
+    var captured by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    BackHandler(onBack = onCancel)
+
+    val webView = remember {
+        CookieManager.getInstance().setAcceptCookie(true)
+        WebView(context).apply {
+            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            webViewClient = object : WebViewClient() {
+                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                    loading = true
+                }
+
+                override fun onPageFinished(view: WebView, url: String?) {
+                    loading = false
+                    // The redirect endpoint returns the authorizationCode JSON.
+                    if (!captured && url != null && url.contains("/id/api/redirect")) {
+                        view.evaluateJavascript("document.body.innerText") { raw ->
+                            val text = runCatching { JSONTokener(raw).nextValue() as? String }
+                                .getOrNull() ?: raw
+                            if (!captured && text != null && text.contains("authorizationCode")) {
+                                captured = true
+                                onCodeCaptured(text)
+                            }
+                        }
+                    }
+                }
+            }
+            loadUrl(authUrl)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { webView.destroy() }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Sign in with Epic Games") },
+                navigationIcon = {
+                    IconButton(onClick = onCancel) {
+                        Icon(Icons.Default.Close, contentDescription = "Cancel sign-in")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { webView }
+            )
+            if (loading) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
