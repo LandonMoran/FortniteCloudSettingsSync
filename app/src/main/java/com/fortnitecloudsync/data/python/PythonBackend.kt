@@ -44,9 +44,13 @@ object PythonBackend {
 
     fun getAuthorizationUrl(): String = callString("get_authorization_url")
 
-    fun extractCodeFromInput(input: String): String? = runCatching {
-        callString("extract_code_from_input", input).trim()
-    }.getOrNull()?.takeIf { it.isNotBlank() }
+    // Returns the parsed authorization code, or null when the input simply did not
+    // contain one. Errors from the Python bridge itself (e.g. the backend failing to
+    // initialise) are intentionally NOT swallowed here, so callers can distinguish
+    // "no code in the input" from "the backend is broken" instead of always blaming
+    // the user's input.
+    fun extractCodeFromInput(input: String): String? =
+        callString("extract_code_from_input", input).trim().takeIf { it.isNotBlank() }
 
     fun exchangeCodeLogin(code: String): PythonAuthResult {
         val json = JSONObject(callString("exchange_code_login_json", code))

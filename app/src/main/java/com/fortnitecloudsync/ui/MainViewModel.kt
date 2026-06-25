@@ -48,8 +48,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun authenticate(input: String) {
         launchWithLoading {
-            val code = authRepository.extractCode(input)
-            if (code == null) {
+            val code = try {
+                authRepository.extractCode(input)
+            } catch (e: Exception) {
+                log("❌ Authentication backend error: ${e.message ?: "unknown error"}")
+                log("The embedded Python backend failed to run. Try reinstalling the app.")
+                return@launchWithLoading
+            }
+            if (code.isNullOrBlank()) {
                 log("❌ No authorization code found in input.")
                 log("Please paste the FULL URL, JSON response, or the code itself.")
                 return@launchWithLoading
