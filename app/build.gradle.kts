@@ -13,7 +13,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -56,7 +56,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
+            // Minification is disabled for the 1.0 release so the release build
+            // behaves exactly like the (extensively tested) debug build. R8 +
+            // Chaquopy/Compose needs runtime verification before it can be safely
+            // re-enabled.
+            isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
