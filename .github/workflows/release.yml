@@ -90,7 +90,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: "Fortnite Cloud Sync ${{ steps.apks.outputs.tag }}"
-          generate_release_notes: true
+          body_path: CHANGELOG.md
           files: |
             FortniteCloudSync-${{ steps.apks.outputs.tag }}-release.apk
             FortniteCloudSync-${{ steps.apks.outputs.tag }}-debug.apk
