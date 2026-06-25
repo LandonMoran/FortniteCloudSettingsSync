@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
+import java.text.ParsePosition
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -233,18 +234,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun formatDate(dateStr: String?): String {
         if (dateStr.isNullOrBlank()) return "Unknown"
         val formats = listOf(
-            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
             "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'",
-            "yyyy-MM-dd'T'HH:mm:ss'Z'",
-            "yyyy-MM-dd'T'HH:mm:ss.SSS",
             "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
             "yyyy-MM-dd'T'HH:mm:ss"
         )
         val output = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         for (fmt in formats) {
             try {
-                val parsed = SimpleDateFormat(fmt, Locale.US).parse(dateStr) ?: continue
-                return output.format(parsed)
+                val parser = SimpleDateFormat(fmt, Locale.US)
+                val pos = ParsePosition(0)
+                val parsed = parser.parse(dateStr, pos)
+                if (parsed != null && pos.index == dateStr.length) {
+                    return output.format(parsed)
+                }
             } catch (_: Exception) {
             }
         }
