@@ -1,12 +1,6 @@
 package com.fortnitecloudsync.ui
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,11 +15,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExitToApp
@@ -42,7 +34,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -57,12 +48,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.fortnitecloudsync.data.model.CloudFile
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -82,8 +74,6 @@ fun FilesScreen(
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     val logListState = rememberLazyListState()
-    val context = LocalContext.current
-    val clipboardManager = remember { context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager }
 
     LaunchedEffect(state.statusMessages.size) {
         if (state.statusMessages.isNotEmpty()) {
@@ -148,12 +138,6 @@ fun FilesScreen(
             BottomAppBar(
                 actions = {
                     IconButton(
-                        onClick = { state.selectedFile?.let { onDownload(it) } },
-                        enabled = state.selectedFile != null && !state.isLoading
-                    ) {
-                        Icon(Icons.Default.Download, contentDescription = "Download selected")
-                    }
-                    IconButton(
                         onClick = onDownloadAll,
                         enabled = state.cloudFiles.isNotEmpty() && !state.isLoading
                     ) {
@@ -190,7 +174,11 @@ fun FilesScreen(
 
             // Filter toggle
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics {
+                        contentDescription = "Hide restricted files, ${if (state.filterRestricted) "on" else "off"}"
+                    },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -271,7 +259,8 @@ fun FilesScreen(
                         isSelected = isSelected,
                         formatSize = formatSize,
                         formatDate = formatDate,
-                        onClick = { onSelectFile(if (isSelected) null else file) }
+                        onClick = { onSelectFile(if (isSelected) null else file) },
+                        onDownload = onDownload
                     )
                 }
             }
@@ -298,25 +287,7 @@ fun FilesScreen(
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold
                         )
-                        if (state.statusMessages.isNotEmpty()) {
-                            OutlinedButton(
-                                onClick = {
-                                    val fullLog = state.statusMessages.joinToString("\n")
-                                    clipboardManager?.setPrimaryClip(ClipData.newPlainText("Fortnite Sync Log", fullLog))
-                                    Toast.makeText(context, "Log copied to clipboard", Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier.height(28.dp),
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.ContentCopy,
-                                    contentDescription = "Copy",
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text("Copy Log", fontSize = 11.sp)
-                            }
-                        }
+                        CopyLogButton(messages = state.statusMessages)
                     }
                     Spacer(Modifier.height(4.dp))
                     LazyColumn(
@@ -330,7 +301,8 @@ fun FilesScreen(
                                 fontSize = 10.sp,
                                 color = when {
                                     message.contains("❌") || message.contains("error", ignoreCase = true) -> MaterialTheme.colorScheme.error
-                                    message.contains("✅") || message.contains("successful", ignoreCase = true) -> MaterialTheme.colorScheme.primary
+                                    message.contains("✅") || message.contains("succeeded") || message.contains("successful") -> MaterialTheme.colorScheme.primary
+                                    message.contains("⬇️") || message.contains("⬆️") || message.contains("🗑️") -> MaterialTheme.colorScheme.tertiary
                                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                                 },
                                 lineHeight = 14.sp
@@ -351,12 +323,16 @@ private fun FileRow(
     isSelected: Boolean,
     formatSize: (Long) -> String,
     formatDate: (String?) -> String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDownload: (CloudFile) -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .semantics {
+                contentDescription = "${file.uniqueFilename}, ${formatSize(file.length)}, ${formatDate(file.lastModified)}, ${if (isSelected) "selected" else "tap to select"}"
+            },
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected)
                 MaterialTheme.colorScheme.primaryContainer
@@ -403,6 +379,14 @@ private fun FileRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
+            // Per-file download — one tap grabs just this file (not all of them).
+            IconButton(onClick = { onDownload(file) }) {
+                Icon(
+                    Icons.Default.Download,
+                    contentDescription = "Download ${file.uniqueFilename}",
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
         }
     }

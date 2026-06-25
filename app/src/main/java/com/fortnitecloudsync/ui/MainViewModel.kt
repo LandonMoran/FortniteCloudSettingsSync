@@ -8,14 +8,14 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fortnitecloudsync.data.AuthRepository
 import com.fortnitecloudsync.data.CloudStorageRepository
+import com.fortnitecloudsync.data.DownloadSaver
 import com.fortnitecloudsync.data.model.CloudFile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import org.json.JSONException
-import org.json.JSONObject
 import java.io.File
+import java.text.ParsePosition
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -48,62 +48,77 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun getAuthorizationUrl(): String = authRepository.getAuthorizationUrl()
 
     fun authenticate(input: String) {
-        log("Received input: ${input.take(100)}${if (input.length > 100) "..." else ""}")
-        
-        val code = extractCode(input)
-        if (code == null) {
-            log("❌ No authorization code found in input.")
-            log("Please paste the FULL URL, JSON response, or the code itself.")
-            log("Input started with: ${input.take(50)}")
-            return
-        }
-        log("✅ Authorization code extracted: ${code.take(6)}...${code.takeLast(4)}")
-        log("Authenticating with Epic Games...")
-        viewModelScope.launch {
-            _state.value = _state.value.copy(isLoading = true)
+        launchWithLoading {
+            val code = try {
+                authRepository.extractCode(input)
+            } catch (e: Exception) {
+                log("❌ Authentication backend error: ${e.message ?: "unknown error"}")
+                log("The embedded Python backend failed to run. Try reinstalling the app.")
+                return@launchWithLoading
+            }
+            if (code.isNullOrBlank()) {
+                log("❌ No authorization code found in input.")
+                log("Please paste the FULL URL, JSON response, or the code itself.")
+                return@launchWithLoading
+            }
+
+            log("🔑 Authorization code extracted: ${code.take(6)}...${code.takeLast(4)}")
+            log("🔄 Authenticating with Epic Games...")
+
             authRepository.exchangeCode(code)
                 .onSuccess { message ->
                     log(message)
-                    _state.value = _state.value.copy(
-                        isAuthenticated = true,
-                        isLoading = false
-                    )
-                    refreshFiles()
+                    _state.value = _state.value.copy(isAuthenticated = true)
+                    refreshFilesInternal()
                 }
                 .onFailure { e ->
                     log("❌ Authentication failed: ${e.message}")
-                    _state.value = _state.value.copy(isLoading = false)
+                    log("⚠️ Epic codes are single-use and expire in ~5 min.")
+                    log("Tap 'Login with Epic Games' to get a FRESH code, then Authenticate right away. Do not reuse a code.")
                 }
         }
     }
 
     fun logout() {
+        authRepository.clearSession()
         _state.value = AppState()
         log("Logged out. Please login again.")
     }
 
+    private fun launchWithLoading(block: suspend () -> Unit) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isLoading = true)
+            try {
+                block()
+            } finally {
+                _state.value = _state.value.copy(isLoading = false)
+            }
+        }
+    }
+
     fun refreshFiles() {
+        launchWithLoading { refreshFilesInternal() }
+    }
+
+    private suspend fun refreshFilesInternal() {
         if (!authRepository.isAuthenticated) {
             log("Please authenticate first.")
             return
         }
-        log("Fetching cloud storage file list...")
-        viewModelScope.launch {
-            _state.value = _state.value.copy(isLoading = true)
-            cloudRepository.listFiles(_state.value.filterRestricted)
-                .onSuccess { (files, filteredCount) ->
-                    val msg = if (filteredCount > 0)
-                        "Found ${files.size} files in cloud storage (filtered $filteredCount restricted files)"
-                    else
-                        "Found ${files.size} files in cloud storage"
-                    log(msg)
-                    _state.value = _state.value.copy(cloudFiles = files, isLoading = false)
+        log("🔄 Fetching cloud storage file list...")
+        cloudRepository.listFiles(_state.value.filterRestricted)
+            .onSuccess { (files, filteredCount) ->
+                val msg = if (filteredCount > 0) {
+                    "Found ${files.size} files in cloud storage (filtered $filteredCount restricted files)"
+                } else {
+                    "Found ${files.size} files in cloud storage"
                 }
-                .onFailure { e ->
-                    log("Failed to list files: ${e.message}")
-                    _state.value = _state.value.copy(isLoading = false)
-                }
-        }
+                log(msg)
+                _state.value = _state.value.copy(cloudFiles = files)
+            }
+            .onFailure { e ->
+                log("Failed to list files: ${e.message}")
+            }
     }
 
     fun toggleFilter(enabled: Boolean) {
@@ -117,19 +132,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun downloadFile(context: Context, file: CloudFile) {
-        log("Downloading ${file.uniqueFilename}...")
-        viewModelScope.launch {
+        log("⬇️ Downloading ${file.uniqueFilename}...")
+        launchWithLoading {
             cloudRepository.downloadFile(file.uniqueFilename)
                 .onSuccess { bytes ->
-                    try {
-                        val dir = context.getExternalFilesDir(null) ?: context.filesDir
-                        val out = File(dir, file.uniqueFilename)
-                        out.writeBytes(bytes)
-                        log("Downloaded ${file.uniqueFilename} (${cloudRepository.formatSize(bytes.size.toLong())})")
-                        log("Saved to: ${out.absolutePath}")
-                    } catch (e: Exception) {
-                        log("Failed to save file: ${e.message}")
-                    }
+                    saveBytes(context, file.uniqueFilename, bytes)
+                        .onSuccess { location ->
+                            log("Downloaded ${file.uniqueFilename} (${cloudRepository.formatSize(bytes.size.toLong())})")
+                            log("Saved to: $location")
+                        }
+                        .onFailure { e -> log("Failed to save file: ${e.message}") }
                 }
                 .onFailure { e -> log("Download failed: ${e.message}") }
         }
@@ -141,22 +153,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             log("No files available to download")
             return
         }
-        log("Starting download of all ${files.size} files...")
-        viewModelScope.launch {
+        log("⬇️ Starting download of all ${files.size} files...")
+        launchWithLoading {
             var successful = 0
             var failed = 0
-            val dir = context.getExternalFilesDir(null) ?: context.filesDir
             files.forEach { file ->
                 log("Downloading (${successful + failed + 1}/${files.size}): ${file.uniqueFilename}")
                 cloudRepository.downloadFile(file.uniqueFilename)
                     .onSuccess { bytes ->
-                        try {
-                            File(dir, file.uniqueFilename).writeBytes(bytes)
-                            successful++
-                        } catch (e: Exception) {
-                            log("Failed to save ${file.uniqueFilename}: ${e.message}")
-                            failed++
-                        }
+                        saveBytes(context, file.uniqueFilename, bytes)
+                            .onSuccess { successful++ }
+                            .onFailure { e ->
+                                log("Failed to save ${file.uniqueFilename}: ${e.message}")
+                                failed++
+                            }
                     }
                     .onFailure { e ->
                         log("Failed to download ${file.uniqueFilename}: ${e.message}")
@@ -164,18 +174,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
             }
             log("Download complete: $successful/${files.size} succeeded, $failed failed")
-            if (successful > 0) log("Files saved to: ${dir.absolutePath}")
+            if (successful > 0) log("Files saved to: Downloads/FortniteCloudSync")
         }
     }
 
+    // Saves to the public Downloads/FortniteCloudSync folder; if that fails
+    // (e.g. older Android without storage permission), falls back to the
+    // app-private folder so a download is never lost.
+    private fun saveBytes(context: Context, filename: String, bytes: ByteArray): Result<String> =
+        DownloadSaver.save(context, filename, bytes).recoverCatching { error ->
+            val dir = context.getExternalFilesDir(null) ?: context.filesDir
+            File(dir, filename).writeBytes(bytes)
+            log("⚠️ Saved to app folder (couldn't reach Downloads: ${error.message})")
+            File(dir, filename).absolutePath
+        }
+
     fun uploadFiles(context: Context, uris: List<Uri>) {
         if (uris.isEmpty()) return
-        log("Starting upload of ${uris.size} file(s)...")
-        viewModelScope.launch {
+        log("⬆️ Starting upload of ${uris.size} file(s)...")
+        launchWithLoading {
             var successful = 0
             var failed = 0
             uris.forEachIndexed { index, uri ->
                 val filename = getFilenameFromUri(context, uri)
+                if (filename == null) {
+                    log("Could not determine filename for URI: $uri")
+                    failed++
+                    return@forEachIndexed
+                }
                 if (!cloudRepository.isFileAllowed(filename)) {
                     log("Skipping restricted file: $filename")
                     failed++
@@ -203,18 +229,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
             }
             log("Upload complete: $successful/${uris.size} succeeded, $failed failed")
-            refreshFiles()
+            refreshFilesInternal()
         }
     }
 
     fun deleteFile(file: CloudFile) {
-        log("Deleting ${file.uniqueFilename}...")
-        viewModelScope.launch {
+        log("🗑️ Deleting ${file.uniqueFilename}...")
+        launchWithLoading {
             cloudRepository.deleteFile(file.uniqueFilename)
                 .onSuccess { message ->
                     log(message)
                     _state.value = _state.value.copy(selectedFile = null)
-                    refreshFiles()
+                    refreshFilesInternal()
                 }
                 .onFailure { e -> log("Delete failed: ${e.message}") }
         }
@@ -225,22 +251,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun formatDate(dateStr: String?): String {
         if (dateStr.isNullOrBlank()) return "Unknown"
         val formats = listOf(
-            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
             "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'",
-            "yyyy-MM-dd'T'HH:mm:ss'Z'",
-            "yyyy-MM-dd'T'HH:mm:ss.SSS",
             "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
             "yyyy-MM-dd'T'HH:mm:ss"
         )
         val output = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         for (fmt in formats) {
             try {
-                val parsed = SimpleDateFormat(fmt, Locale.US).parse(dateStr) ?: continue
-                return output.format(parsed)
-            } catch (_: Exception) {}
+                val parser = SimpleDateFormat(fmt, Locale.US)
+                val pos = ParsePosition(0)
+                val parsed = parser.parse(dateStr, pos)
+                if (parsed != null && pos.index == dateStr.length) {
+                    return output.format(parsed)
+                }
+            } catch (_: Exception) {
+            }
         }
         return dateStr
     }
+
+    // Public hook so UI (e.g. the in-app WebView login) can record progress in
+    // the same status log the user can read and copy.
+    fun appendLog(message: String) = log(message)
 
     private fun log(message: String) {
         val ts = timestampFormat.format(Date())
@@ -251,65 +286,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.value = _state.value.copy(statusMessages = current)
     }
 
-    private fun extractCode(input: String): String? {
-        val trimmed = input.trim()
-        log("extractCode: Processing input (length: ${trimmed.length})")
-        
-        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-            log("extractCode: Detected JSON format")
-            try {
-                val json = JSONObject(trimmed)
-                val authCode = json.optString("authorizationCode")
-                log("extractCode: JSON authorizationCode field: ${if (authCode.isNotEmpty()) authCode.take(6) + "..." else "empty/not found"}")
-                if (authCode.isNotEmpty()) return authCode
-                
-                val redirectUrl = json.optString("redirectUrl")
-                if (redirectUrl.contains("code=")) {
-                    log("extractCode: Found redirectUrl with code, extracting...")
-                    return extractCodeFromUrl(redirectUrl)
-                } else {
-                    log("extractCode: redirectUrl doesn't contain code or redirectUrl is: $redirectUrl")
-                }
-            } catch (_: JSONException) {
-                log("extractCode: JSON parsing failed")
-            }
-        } else if (trimmed.startsWith("http")) {
-            log("extractCode: Detected URL format")
-            return extractCodeFromUrl(trimmed)
-        } else if (Regex("^[a-zA-Z0-9]{20,40}$").matches(trimmed)) {
-            log("extractCode: Detected raw code format")
-            return trimmed
-        } else {
-            log("extractCode: Unknown format, starts with: ${trimmed.take(30)}")
-        }
-        return null
-    }
-
-    private fun extractCodeFromUrl(url: String): String? {
-        log("extractCodeFromUrl: Parsing URL: ${url.take(80)}...")
-        return try {
-            val uri = Uri.parse(url)
-            val code = uri.getQueryParameter("code")
-            if (code != null) {
-                log("extractCodeFromUrl: Found code: ${code.take(6)}...")
-                code
-            } else {
-                log("extractCodeFromUrl: No 'code' parameter found in URL")
-                null
-            }
-        } catch (_: Exception) {
-            log("extractCodeFromUrl: URL parsing failed")
-            null
-        }
-    }
-
-    private fun getFilenameFromUri(context: Context, uri: Uri): String {
+    private fun getFilenameFromUri(context: Context, uri: Uri): String? {
         context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) {
                 val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (idx >= 0) return cursor.getString(idx)
+                if (idx >= 0) {
+                    val name = cursor.getString(idx)
+                    if (!name.isNullOrBlank()) return name
+                }
             }
         }
-        return uri.lastPathSegment ?: "unknown_file"
+        val segment = uri.lastPathSegment
+        if (!segment.isNullOrBlank()) return segment
+        return null
     }
 }

@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.chaquo.python")
 }
 
 android {
@@ -14,19 +15,38 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
         vectorDrawables {
             useSupportLibrary = true
         }
     }
 
-    // Reads keystore details from env vars when set (e.g. in CI).
-    // Set KEYSTORE_FILE, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD to enable
-    // signed release builds; omit them to produce an unsigned APK.
-    val keystoreFile = System.getenv("KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
-    if (keystoreFile != null) {
+    // One shared signing key for BOTH debug and release builds. It is committed
+    // on purpose (app/debug.keystore) so every build — local, CI debug, CI
+    // release — carries the same signature. That means the app updates in place
+    // (no uninstall/reinstall), and a future public release can update over the
+    // debug builds testers already have. This is a low-value distribution key
+    // for a sideloaded app, not a secret.
+    //
+    // For a Play Store launch, provide a private key via CI secrets by setting
+    // KEYSTORE_FILE, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD — when present
+    // they override the release signing below automatically.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "fortnite"
+            keyAlias = "fortnite"
+            keyPassword = "fortnite"
+        }
+    }
+
+    val releaseKeystore = System.getenv("KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
+    if (releaseKeystore != null) {
         signingConfigs {
             create("release") {
-                storeFile = file(keystoreFile)
+                storeFile = file(releaseKeystore)
                 storePassword = System.getenv("KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("KEY_ALIAS")
                 keyPassword = System.getenv("KEY_PASSWORD")
@@ -41,12 +61,15 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            if (keystoreFile != null) {
-                signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (releaseKeystore != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
             }
         }
         debug {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
@@ -69,6 +92,15 @@ android {
     }
 }
 
+chaquopy {
+    defaultConfig {
+        version = "3.12"
+        pip {
+            install("-r", "src/main/python/requirements.txt")
+        }
+    }
+}
+
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.04.00")
     implementation(composeBom)
@@ -85,12 +117,6 @@ dependencies {
     // ViewModel + Lifecycle
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
-
-    // Networking
-    implementation("com.squareup.retrofit2:retrofit:2.9.0")
-    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")

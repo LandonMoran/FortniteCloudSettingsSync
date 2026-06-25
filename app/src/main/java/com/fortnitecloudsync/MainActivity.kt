@@ -10,12 +10,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fortnitecloudsync.ui.FilesScreen
 import com.fortnitecloudsync.ui.LoginScreen
 import com.fortnitecloudsync.ui.MainViewModel
+import com.fortnitecloudsync.ui.WebLoginScreen
 import com.fortnitecloudsync.ui.theme.FortniteCloudTheme
 
 class MainActivity : ComponentActivity() {
@@ -31,6 +35,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val viewModel: MainViewModel = viewModel()
                     val state by viewModel.state.collectAsStateWithLifecycle()
+                    var showWebLogin by remember { mutableStateOf(false) }
 
                     val uploadLauncher = rememberLauncherForActivityResult(
                         contract = ActivityResultContracts.OpenMultipleDocuments()
@@ -38,9 +43,23 @@ class MainActivity : ComponentActivity() {
                         if (uris.isNotEmpty()) viewModel.uploadFiles(this@MainActivity, uris)
                     }
 
-                    if (!state.isAuthenticated) {
+                    if (showWebLogin && !state.isAuthenticated) {
+                        WebLoginScreen(
+                            authUrl = viewModel.getAuthorizationUrl(),
+                            onCodeCaptured = { captured ->
+                                showWebLogin = false
+                                viewModel.authenticate(captured)
+                            },
+                            onCancel = { showWebLogin = false },
+                            onLog = { msg -> viewModel.appendLog(msg) }
+                        )
+                    } else if (!state.isAuthenticated) {
                         LoginScreen(
                             onLogin = { viewModel.getAuthorizationUrl() },
+                            onWebLogin = {
+                                viewModel.appendLog("🌐 Opening in-app Epic sign-in…")
+                                showWebLogin = true
+                            },
                             onAuthenticate = { code -> viewModel.authenticate(code) },
                             isLoading = state.isLoading,
                             statusMessages = state.statusMessages

@@ -20,7 +20,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -49,6 +48,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun LoginScreen(
     onLogin: () -> String,
+    onWebLogin: () -> Unit,
     onAuthenticate: (String) -> Unit,
     isLoading: Boolean,
     statusMessages: List<String>
@@ -112,17 +112,40 @@ fun LoginScreen(
                 Divider()
 
                 Text(
-                    text = "1. Tap the button below to open the Epic Games login page",
+                    text = "Sign in with your Epic Games account. The app opens Epic's " +
+                        "login and captures the code for you — no copy/paste.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Button(
+                    onClick = onWebLogin,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Login, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Sign in with Epic Games")
+                }
+
+                Divider()
+
+                Text(
+                    text = "Trouble signing in? Use the manual method:",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "1. Open the login page in your browser",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "2. After logging in, copy the full URL or JSON from your browser",
+                    text = "2. After logging in, copy the full URL or JSON shown",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "3. Paste it in the field below and tap Authenticate",
+                    text = "3. Paste it below and tap Authenticate",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -138,7 +161,7 @@ fun LoginScreen(
                 ) {
                     Icon(Icons.Default.Login, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Login with Epic Games")
+                    Text("Open login in browser")
                 }
 
                 OutlinedTextField(
@@ -155,6 +178,9 @@ fun LoginScreen(
                 Button(
                     onClick = {
                         onAuthenticate(authInput)
+                        // Clear the field after submitting. Epic authorization codes
+                        // are single-use, so keeping the consumed code here would let
+                        // the user resubmit a dead code and get "invalid" forever.
                         authInput = ""
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -186,11 +212,18 @@ fun LoginScreen(
                 )
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = "Status Log",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Status Log",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        CopyLogButton(messages = statusMessages)
+                    }
                     Spacer(Modifier.height(4.dp))
                     LazyColumn(state = logListState) {
                         items(statusMessages) { message ->
@@ -199,7 +232,12 @@ fun LoginScreen(
                                 style = MaterialTheme.typography.labelSmall,
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = when {
+                                    message.contains("❌") || message.contains("error", ignoreCase = true) -> MaterialTheme.colorScheme.error
+                                    message.contains("✅") || message.contains("successful") || message.contains("succeeded") -> MaterialTheme.colorScheme.primary
+                                    message.contains("🔑") || message.contains("🔄") -> MaterialTheme.colorScheme.tertiary
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                }
                             )
                         }
                     }

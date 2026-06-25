@@ -1,16 +1,8 @@
-# Retrofit
--keepattributes Signature
--keepattributes *Annotation*
--keep class retrofit2.** { *; }
--keepclasseswithmembers class * {
-    @retrofit2.http.* <methods>;
-}
-
-# Gson
--keep class com.google.gson.** { *; }
--keep class com.fortnitecloudsync.data.remote.** { *; }
+# Chaquopy/Python keep rules
+-keep class com.chaquo.python.** { *; }
+-keep class org.python.** { *; }
+-keep class com.fortnitecloudsync.data.python.** { *; }
 -keep class com.fortnitecloudsync.data.model.** { *; }
 
-# OkHttp
--dontwarn okhttp3.**
--dontwarn okio.**
+# Keep JSON classes
+-keep class org.json.** { *; }

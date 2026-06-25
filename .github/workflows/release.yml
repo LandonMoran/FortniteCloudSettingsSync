@@ -24,6 +24,11 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
